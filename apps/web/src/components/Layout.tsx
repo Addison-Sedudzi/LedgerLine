@@ -48,6 +48,7 @@ export function Layout(): ReactNode {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <nav
+        className="no-print"
         style={{
           width: 220,
           borderRight: '1px solid var(--rule)',
@@ -98,6 +99,7 @@ export function Layout(): ReactNode {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <header
+          className="no-print"
           style={{
             display: 'flex',
             alignItems: 'center',

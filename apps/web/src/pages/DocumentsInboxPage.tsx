@@ -1,4 +1,4 @@
-import { ChangeEvent, useState } from 'react';
+import { ChangeEvent, DragEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DocumentStatus } from '@ledgerline/shared';
@@ -9,12 +9,15 @@ import { LedgerTable } from '../components/LedgerTable';
 import { StatusPill } from '../components/StatusPill';
 import { EmptyState } from '../components/EmptyState';
 
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
 export function DocumentsInboxPage() {
   const navigate = useNavigate();
   const { clientId } = useClientPeriod();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<DocumentStatus | ''>('');
   const [uploading, setUploading] = useState(0);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: queryKeys.documents(clientId ?? '', status),
@@ -30,24 +33,55 @@ export function DocumentsInboxPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.documents(clientId!, status) }),
   });
 
-  const handleFiles = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+  const uploadFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((f) => ACCEPTED_TYPES.includes(f.type));
+    if (files.length === 0) return;
     setUploading(files.length);
     for (const file of files) {
       await uploadMutation.mutateAsync(file);
       setUploading((n) => n - 1);
     }
+  };
+
+  const handleFileInput = async (e: ChangeEvent<HTMLInputElement>) => {
+    await uploadFiles(e.target.files ?? []);
     e.target.value = '';
+  };
+
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    await uploadFiles(e.dataTransfer.files);
   };
 
   const sorted = [...documents].sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at));
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-        <h2>Document inbox</h2>
+      <h2>Document inbox</h2>
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDraggingOver(true);
+        }}
+        onDragLeave={() => setIsDraggingOver(false)}
+        onDrop={handleDrop}
+        style={{
+          border: `1px dashed ${isDraggingOver ? 'var(--accent)' : 'var(--rule)'}`,
+          borderRadius: 'var(--radius)',
+          padding: 'var(--space-5)',
+          textAlign: 'center',
+          marginBottom: 'var(--space-4)',
+          background: isDraggingOver ? 'var(--greenbar)' : 'transparent',
+        }}
+      >
+        <p style={{ color: 'var(--ink-muted)', margin: 0, marginBottom: 'var(--space-3)' }}>
+          Drag invoices or receipts here, or
+        </p>
         <label
           style={{
+            display: 'inline-block',
             padding: '8px 16px',
             background: 'var(--accent)',
             color: '#fff',
@@ -55,9 +89,12 @@ export function DocumentsInboxPage() {
             cursor: 'pointer',
           }}
         >
-          {uploading > 0 ? `Uploading ${uploading}…` : 'Upload documents'}
-          <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handleFiles} style={{ display: 'none' }} />
+          {uploading > 0 ? `Uploading ${uploading}…` : 'Choose files'}
+          <input type="file" multiple accept={ACCEPTED_TYPES.join(',')} onChange={handleFileInput} style={{ display: 'none' }} />
         </label>
+        <p style={{ color: 'var(--ink-muted)', fontSize: 12, marginTop: 'var(--space-2)', marginBottom: 0 }}>
+          JPEG, PNG or WebP — a phone photo works fine.
+        </p>
       </div>
 
       <select

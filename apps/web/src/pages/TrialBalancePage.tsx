@@ -8,6 +8,7 @@ import { LedgerTable } from '../components/LedgerTable';
 import { Figure } from '../components/Figure';
 import { DateField } from '../components/DateField';
 import { ErrorState } from '../components/ErrorState';
+import { PrintButton, PrintFooter } from '../components/PrintFooter';
 
 export function TrialBalancePage() {
   const navigate = useNavigate();
@@ -23,10 +24,13 @@ export function TrialBalancePage() {
 
   return (
     <div>
-      <h2>Trial balance</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <h2>Trial balance</h2>
+        <PrintButton />
+      </div>
       <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', marginBottom: 'var(--space-4)' }}>
         <DateField label="As at" value={asAt} onChange={setAsAt} />
-        <label style={{ fontSize: 13 }}>
+        <label className="no-print" style={{ fontSize: 13 }}>
           <input type="checkbox" checked={includeDrafts} onChange={(e) => setIncludeDrafts(e.target.checked)} />{' '}
           Include drafts
         </label>
@@ -71,6 +75,7 @@ export function TrialBalancePage() {
           }}
         />
       )}
+      <PrintFooter />
     </div>
   );
 }

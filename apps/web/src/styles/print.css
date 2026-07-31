@@ -1,0 +1,51 @@
+/* Printing a trial balance or a statement should produce a clean document: no navigation,
+   no controls, table headers repeating across pages, and a footer identifying what this is
+   and when it was printed. Elements that should vanish on paper carry the .no-print class. */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    font-size: 11pt;
+  }
+
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .ledger-table-wrap {
+    border: none;
+    overflow: visible;
+  }
+
+  .ledger-table thead th {
+    position: static;
+  }
+
+  .ledger-table thead {
+    display: table-header-group;
+  }
+
+  .ledger-table tr {
+    break-inside: avoid;
+  }
+
+  .print-footer {
+    display: block !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    font-size: 9pt;
+    color: var(--ink-muted);
+    border-top: 1px solid var(--rule);
+    padding-top: 4px;
+  }
+}
+
+.print-footer {
+  display: none;
+}

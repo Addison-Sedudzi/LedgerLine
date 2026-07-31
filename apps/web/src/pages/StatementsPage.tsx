@@ -5,6 +5,7 @@ import { getIncomeStatement, getBalanceSheet, StatementLine } from '../api/repor
 import { queryKeys } from '../api/queryKeys';
 import { Figure } from '../components/Figure';
 import { ErrorState } from '../components/ErrorState';
+import { PrintButton, PrintFooter } from '../components/PrintFooter';
 import { Link } from 'react-router-dom';
 
 function StatementRows({ lines }: { lines: StatementLine[] }) {
@@ -46,8 +47,11 @@ export function StatementsPage() {
 
   return (
     <div>
-      <h2>Financial statements</h2>
-      <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-4)', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <h2>Financial statements</h2>
+        <PrintButton />
+      </div>
+      <div className="no-print" style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-4)', alignItems: 'center' }}>
         <button onClick={() => setTab('income')} style={{ fontWeight: tab === 'income' ? 700 : 400, border: 'none', background: 'none', cursor: 'pointer' }}>
           Income statement
         </button>
@@ -159,6 +163,7 @@ export function StatementsPage() {
           </table>
         </div>
       )}
+      <PrintFooter />
     </div>
   );
 }
