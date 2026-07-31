@@ -295,7 +295,7 @@ export class JournalService {
       }
 
       const date = reversalDate ?? original.entry_date;
-      const period = await this.periods.findContainingDate(clientId, date);
+      const period = await this.periods.findContainingDate(clientId, date, client);
       if (!period) {
         throw new ValidationError(`No fiscal period covers ${date}; cannot post a reversal there`);
       }

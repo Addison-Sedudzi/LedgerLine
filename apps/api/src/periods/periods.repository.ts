@@ -34,11 +34,12 @@ export class PeriodsRepository {
     return result.rows[0] ?? null;
   }
 
-  async findContainingDate(clientId: string, date: string): Promise<PeriodRow | null> {
-    const rows = await this.db.query<PeriodRow>(
+  async findContainingDate(clientId: string, date: string, client?: PoolClient): Promise<PeriodRow | null> {
+    const runner = client ?? this.db.pool;
+    const result = await runner.query(
       'SELECT * FROM fiscal_periods WHERE client_id = $1 AND start_date <= $2 AND end_date >= $2',
       [clientId, date],
     );
-    return rows[0] ?? null;
+    return result.rows[0] ?? null;
   }
 }
