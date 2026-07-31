@@ -1,0 +1,60 @@
+.ledger-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ledger-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.ledger-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.ledger-table tbody tr:nth-child(even) {
+  background: var(--greenbar);
+}
+
+.ledger-row.clickable {
+  cursor: pointer;
+}
+
+.ledger-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.align-right {
+  text-align: right;
+}
+
+.ledger-totals td {
+  border-top: 1px solid var(--ink);
+  border-bottom: 3px double var(--ink);
+  font-weight: 600;
+}
+
+.ledger-empty {
+  text-align: center;
+  color: var(--ink-muted);
+  padding: var(--space-5);
+}

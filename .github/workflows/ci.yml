@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm install --legacy-peer-deps
+
+      - run: npm run lint
+
+      - run: npm run build -w packages/shared
+      - run: npm run typecheck -w apps/api
+      - run: npm run typecheck -w apps/web
+
+      - run: npm run test -w apps/api
+
+      - run: npm run build -w apps/api
+      - run: npm run build -w apps/web
+
+  # Runs the accounting correctness suite against a real Postgres database. Only fires when
+  # a DATABASE_URL secret pointing at a disposable test database is configured in the repo's
+  # settings — see README.md. Without it, this job is a deliberate no-op rather than a
+  # failure, so the rest of CI isn't blocked on a database the repo may not have yet.
+  accounting-correctness:
+    runs-on: ubuntu-latest
+    if: ${{ vars.HAS_TEST_DATABASE == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --legacy-peer-deps
+      - run: npm run migrate -w apps/api
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: npm run seed -w apps/api
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: npm run test:accounting -w apps/api
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

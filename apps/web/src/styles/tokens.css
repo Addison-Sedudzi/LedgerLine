@@ -1,0 +1,100 @@
+/* Design tokens for LedgerLine.
+   The subject is ledger paper: pale green banding across alternating rows, hairline rules,
+   figures set in a monospace font and right aligned. Colour carries no accounting meaning —
+   a debit is not green and a credit is not red. Colour is reserved for interaction and for
+   genuine alarm. */
+
+:root {
+  --ink: #16191c;
+  --ink-muted: #5a6169;
+  --paper: #ffffff;
+  --greenbar: #e9f1e7;
+  --rule: #d5d9d2;
+  --accent: #1f4e5f;
+  --alarm: #8c2f1f;
+  --flag: #b8860b;
+
+  --font-display: 'Archivo', 'Arial Narrow', sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  --radius: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+}
+
+.figure,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font-family: inherit;
+  border-radius: var(--radius);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8eaec;
+    --ink-muted: #9aa2ab;
+    --paper: #14171a;
+    --greenbar: #1b2420;
+    --rule: #33383d;
+    --accent: #6fb3cc;
+    --alarm: #d97a68;
+    --flag: #d9ac4f;
+  }
+}
