@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { UserRole } from '@ledgerline/shared';
 import { useAuth } from '../context/AuthContext';
 import { useClientPeriod } from '../context/ClientPeriodContext';
 import { PeriodBadge } from './PeriodBadge';
@@ -7,6 +8,7 @@ import { PeriodBadge } from './PeriodBadge';
 interface NavItem {
   to: string;
   label: string;
+  roles?: UserRole[];
 }
 
 interface NavGroup {
@@ -15,6 +17,9 @@ interface NavGroup {
 }
 
 // Grouped the way an accountant thinks about the work, not the way the code is organised.
+// An item with no `roles` is visible to everyone; the audit trail is restricted to
+// reviewer/admin server-side (AuditController), so it is hidden rather than shown and
+// rejected.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Record',
@@ -25,7 +30,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Review',
-    items: [{ to: '/audit', label: 'Audit trail' }],
+    items: [{ to: '/audit', label: 'Audit trail', roles: ['reviewer', 'admin'] }],
   },
   {
     label: 'Reports',
@@ -59,13 +64,16 @@ export function Layout(): ReactNode {
         }}
       >
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18 }}>LedgerLine</div>
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => {
+          const visibleItems = group.items.filter((item) => !item.roles || (me && item.roles.includes(me.role)));
+          if (visibleItems.length === 0) return null;
+          return (
           <div key={group.label}>
             <div style={{ fontSize: 11, color: 'var(--ink-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
               {group.label}
             </div>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {group.items.map((item) => (
+              {visibleItems.map((item) => (
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
@@ -84,7 +92,8 @@ export function Layout(): ReactNode {
               ))}
             </ul>
           </div>
-        ))}
+          );
+        })}
         <div style={{ marginTop: 'auto', fontSize: 12, color: 'var(--ink-muted)' }}>
           <div>{me?.fullName}</div>
           <div>{me?.role}</div>

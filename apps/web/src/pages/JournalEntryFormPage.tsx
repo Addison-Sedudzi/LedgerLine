@@ -238,6 +238,7 @@ export function JournalEntryFormPage() {
           <button
             disabled={!balanced || isPeriodClosed || createMutation.isPending}
             onClick={() => createMutation.mutate()}
+            title={isPeriodClosed ? 'This period is closed. No postings can be made against it.' : undefined}
             style={{
               padding: '8px 16px',
               border: '1px solid var(--rule)',
@@ -256,6 +257,7 @@ export function JournalEntryFormPage() {
                   postMutation.mutate();
                 }
               }}
+              title={isPeriodClosed ? 'This period is closed. No postings can be made against it.' : undefined}
               style={{
                 padding: '8px 16px',
                 border: 'none',

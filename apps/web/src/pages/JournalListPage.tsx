@@ -17,7 +17,7 @@ const STATUS_TONE: Record<JournalEntryStatus, 'neutral' | 'accent' | 'alarm' | '
 
 export function JournalListPage() {
   const navigate = useNavigate();
-  const { clientId, periodId } = useClientPeriod();
+  const { clientId, periodId, isPeriodClosed } = useClientPeriod();
   const [status, setStatus] = useState<JournalEntryStatus | ''>('');
   const [search, setSearch] = useState('');
 
@@ -31,12 +31,27 @@ export function JournalListPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
         <h2>Journal entries</h2>
-        <Link
-          to="/journal/new"
-          style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', textDecoration: 'none' }}
-        >
-          Raise an entry
-        </Link>
+        {isPeriodClosed ? (
+          <span
+            title="This period is closed. No new entries can be raised against it — switch to an open period."
+            style={{
+              padding: '8px 16px',
+              background: 'var(--rule)',
+              color: 'var(--ink-muted)',
+              borderRadius: 'var(--radius)',
+              cursor: 'not-allowed',
+            }}
+          >
+            Raise an entry
+          </span>
+        ) : (
+          <Link
+            to="/journal/new"
+            style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', textDecoration: 'none' }}
+          >
+            Raise an entry
+          </Link>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
@@ -63,7 +78,13 @@ export function JournalListPage() {
           title="No journal entries yet for this period."
           action={
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <Link to="/journal/new">Raise an entry</Link>
+              {isPeriodClosed ? (
+                <span title="This period is closed." style={{ color: 'var(--ink-muted)' }}>
+                  Raise an entry
+                </span>
+              ) : (
+                <Link to="/journal/new">Raise an entry</Link>
+              )}
               <span>·</span>
               <Link to="/documents">Go to the document inbox</Link>
             </div>
