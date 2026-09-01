@@ -43,6 +43,7 @@ export function JournalEntryFormPage() {
   });
 
   const canPost = me?.role === 'reviewer' || me?.role === 'admin';
+  const isAdmin = me?.role === 'admin';
 
   const totalDebit = sumMoney(lines.map((l) => l.debit || '0'));
   const totalCredit = sumMoney(lines.map((l) => l.credit || '0'));
@@ -167,6 +168,8 @@ export function JournalEntryFormPage() {
                   accounts={accounts}
                   value={line.accountId}
                   onChange={(id) => updateLine(index, { accountId: id })}
+                  clientId={clientId ?? undefined}
+                  canCreate={isAdmin}
                 />
               </td>
               <td style={{ padding: 4 }}>

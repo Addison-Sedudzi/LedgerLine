@@ -8,6 +8,7 @@ export function LoginPage() {
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,13 +65,40 @@ export function LoginPage() {
 
         <label style={{ display: 'block', marginBottom: 'var(--space-4)' }}>
           <div style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 4 }}>Password</div>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                paddingRight: 56,
+                border: '1px solid var(--rule)',
+                borderRadius: 'var(--radius)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              style={{
+                position: 'absolute',
+                right: 4,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                padding: '4px 8px',
+                border: 'none',
+                background: 'none',
+                color: 'var(--accent)',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </label>
 
         <button

@@ -1,5 +1,9 @@
-import { KeyboardEvent, useMemo, useRef, useState } from 'react';
-import { Account } from '@ledgerline/shared';
+import { FormEvent, KeyboardEvent, useMemo, useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Account, AccountType } from '@ledgerline/shared';
+import { createAccount } from '../api/accounts';
+import { queryKeys } from '../api/queryKeys';
+import { ApiError } from '../api/apiClient';
 
 interface AccountPickerProps {
   accounts: Account[];
@@ -7,16 +11,49 @@ interface AccountPickerProps {
   onChange: (accountId: string) => void;
   onNext?: () => void;
   placeholder?: string;
+  // Admin-only: lets the user create a new account inline instead of leaving the page.
+  // Omit clientId/canCreate to get the plain picker (e.g. on the document review page).
+  clientId?: string;
+  canCreate?: boolean;
 }
+
+const TYPE_ORDER: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
 
 // Opens on typing, filters by code or name, closes on Escape or selection. Built for
 // keyboard-only journal entry: Tab arrives here, arrow keys move through the filtered list,
 // Enter selects and moves on.
-export function AccountPicker({ accounts, value, onChange, onNext, placeholder }: AccountPickerProps) {
+export function AccountPicker({ accounts, value, onChange, onNext, placeholder, clientId, canCreate }: AccountPickerProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState<AccountType>('EXPENSE');
+  const [createError, setCreateError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: () => createAccount(clientId!, { code: newCode, name: newName, type: newType }),
+    onSuccess: (account) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId!) });
+      onChange(account.id);
+      setNewCode('');
+      setNewName('');
+      setCreating(false);
+      setQuery('');
+      setOpen(false);
+      onNext?.();
+    },
+    onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Failed to create account'),
+  });
+
+  const handleCreateSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setCreateError(null);
+    createMutation.mutate();
+  };
 
   const selected = accounts.find((a) => a.id === value);
 
@@ -68,7 +105,7 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder }
           setHighlighted(0);
         }}
         onKeyDown={handleKeyDown}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onBlur={() => setTimeout(() => { if (!creating) setOpen(false); }, 120)}
         style={{
           width: '100%',
           padding: '6px 8px',
@@ -78,8 +115,7 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder }
         }}
       />
       {open && (
-        <ul
-          role="listbox"
+        <div
           style={{
             position: 'absolute',
             zIndex: 20,
@@ -88,34 +124,109 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder }
             right: 0,
             background: 'var(--paper)',
             border: '1px solid var(--rule)',
-            maxHeight: 220,
-            overflowY: 'auto',
-            margin: 0,
-            padding: 0,
-            listStyle: 'none',
           }}
         >
-          {filtered.length === 0 && <li style={{ padding: 8, color: 'var(--ink-muted)' }}>No matching account</li>}
-          {filtered.map((a, i) => (
-            <li
-              key={a.id}
-              role="option"
-              aria-selected={i === highlighted}
-              onMouseDown={() => commit(a)}
+          {!creating && (
+            <ul
+              role="listbox"
               style={{
-                padding: '6px 8px',
-                background: i === highlighted ? 'var(--greenbar)' : 'transparent',
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 8,
+                maxHeight: 220,
+                overflowY: 'auto',
+                margin: 0,
+                padding: 0,
+                listStyle: 'none',
               }}
             >
-              <span className="mono">{a.code}</span>
-              <span>{a.name}</span>
-            </li>
-          ))}
-        </ul>
+              {filtered.length === 0 && <li style={{ padding: 8, color: 'var(--ink-muted)' }}>No matching account</li>}
+              {filtered.map((a, i) => (
+                <li
+                  key={a.id}
+                  role="option"
+                  aria-selected={i === highlighted}
+                  onMouseDown={() => commit(a)}
+                  style={{
+                    padding: '6px 8px',
+                    background: i === highlighted ? 'var(--greenbar)' : 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                  }}
+                >
+                  <span className="mono">{a.code}</span>
+                  <span>{a.name}</span>
+                </li>
+              ))}
+              {canCreate && clientId && (
+                <li
+                  onMouseDown={() => {
+                    setCreating(true);
+                    setNewCode(query);
+                    setCreateError(null);
+                  }}
+                  style={{
+                    padding: '6px 8px',
+                    borderTop: '1px solid var(--rule)',
+                    color: 'var(--accent)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  + New account
+                </li>
+              )}
+            </ul>
+          )}
+
+          {creating && (
+            <form onSubmit={handleCreateSubmit} style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  autoFocus
+                  required
+                  placeholder="Code"
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value)}
+                  style={{ width: 80, padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+                />
+                <input
+                  required
+                  placeholder="Name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  style={{ flex: 1, padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+                />
+              </div>
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value as AccountType)}
+                style={{ padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+              >
+                {TYPE_ORDER.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              {createError && <span style={{ color: 'var(--alarm)', fontSize: 12 }}>{createError}</span>}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  style={{ padding: '4px 10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)' }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreating(false)}
+                  style={{ padding: '4px 10px', border: '1px solid var(--rule)', background: 'var(--paper)', borderRadius: 'var(--radius)' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       )}
     </div>
   );
