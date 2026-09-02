@@ -9,6 +9,7 @@ export const queryKeys = {
   journalEntry: (clientId: string, id: string) => ['journal-entries', clientId, 'one', id] as const,
   generalLedger: (clientId: string, accountId: string, from: string, to: string) =>
     ['ledger', clientId, accountId, from, to] as const,
+  ledgerForPeriod: (clientId: string, periodId: string) => ['ledger-period', clientId, periodId] as const,
   trialBalance: (clientId: string, asAt: string, includeDrafts: boolean) =>
     ['trial-balance', clientId, asAt, includeDrafts] as const,
   incomeStatement: (clientId: string, periodId: string) => ['income-statement', clientId, periodId] as const,

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PoolClient } from 'pg';
-import { AccountType, NormalBalance } from '@ledgerline/shared';
+import { AccountSubtype, AccountType, NormalBalance } from '@ledgerline/shared';
 import { DatabaseService } from '../database/database.service';
 
 export interface AccountRow {
@@ -13,6 +13,8 @@ export interface AccountRow {
   parent_id: string | null;
   is_postable: boolean;
   is_active: boolean;
+  description: string | null;
+  subtype: AccountSubtype | null;
 }
 
 @Injectable()
@@ -43,6 +45,16 @@ export class AccountsRepository {
     const rows = await this.db.query<AccountRow>(
       'SELECT * FROM accounts WHERE client_id = $1 AND id = $2',
       [clientId, id],
+    );
+    return rows[0] ?? null;
+  }
+
+  // Case-insensitive: "Bank" and "bank" are the same account to a bookkeeper typing a name
+  // from memory, even though code and name themselves stay case-sensitive everywhere else.
+  async findByName(clientId: string, name: string): Promise<AccountRow | null> {
+    const rows = await this.db.query<AccountRow>(
+      'SELECT * FROM accounts WHERE client_id = $1 AND lower(name) = lower($2)',
+      [clientId, name],
     );
     return rows[0] ?? null;
   }
@@ -94,12 +106,24 @@ export class AccountsRepository {
       normalBalance: NormalBalance;
       parentId: string | null;
       isPostable: boolean;
+      description: string | null;
+      subtype: AccountSubtype | null;
     },
   ): Promise<AccountRow> {
     const rows = await this.db.query<AccountRow>(
-      `INSERT INTO accounts (client_id, code, name, type, normal_balance, parent_id, is_postable)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [clientId, input.code, input.name, input.type, input.normalBalance, input.parentId, input.isPostable],
+      `INSERT INTO accounts (client_id, code, name, type, normal_balance, parent_id, is_postable, description, subtype)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        clientId,
+        input.code,
+        input.name,
+        input.type,
+        input.normalBalance,
+        input.parentId,
+        input.isPostable,
+        input.description,
+        input.subtype,
+      ],
     );
     return rows[0];
   }
@@ -107,7 +131,7 @@ export class AccountsRepository {
   async update(
     clientId: string,
     id: string,
-    patch: Partial<{ name: string; isActive: boolean }>,
+    patch: Partial<{ name: string; isActive: boolean; subtype: AccountSubtype }>,
   ): Promise<AccountRow> {
     const sets: string[] = [];
     const params: unknown[] = [];
@@ -118,6 +142,10 @@ export class AccountsRepository {
     if (patch.isActive !== undefined) {
       params.push(patch.isActive);
       sets.push(`is_active = $${params.length}`);
+    }
+    if (patch.subtype !== undefined) {
+      params.push(patch.subtype);
+      sets.push(`subtype = $${params.length}`);
     }
     params.push(clientId, id);
     const rows = await this.db.query<AccountRow>(

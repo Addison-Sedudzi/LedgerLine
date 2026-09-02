@@ -133,6 +133,7 @@ export class DocumentsService {
       const result = await this.claude.messages({
         system: EXTRACTION_SYSTEM_PROMPT,
         document: { base64, mediaType: doc.mime_type },
+        tier: 'fast',
         purpose: 'document_extraction',
         clientId,
         documentId: id,
@@ -187,6 +188,7 @@ Pick accountId from the provided list of account ids only, or null if none fit.`
       const result = await this.claude.messages({
         system,
         userText,
+        tier: 'fast',
         purpose: 'document_coding',
         clientId,
         documentId: doc.id,

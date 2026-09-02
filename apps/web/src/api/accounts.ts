@@ -1,4 +1,4 @@
-import { Account, AccountType } from '@ledgerline/shared';
+import { Account, AccountSubtype, AccountType } from '@ledgerline/shared';
 import { apiFetch } from './apiClient';
 
 export function listAccounts(clientId: string, filters: { type?: AccountType; active?: boolean } = {}) {
@@ -22,11 +22,19 @@ export function getAccountBalance(clientId: string, id: string, asAt: string) {
 
 export function createAccount(
   clientId: string,
-  input: { code: string; name: string; type: AccountType; parentId?: string },
+  input: { name: string; type: AccountType; parentId?: string; description?: string },
 ) {
   return apiFetch<Account>('/accounts', { method: 'POST', body: input, clientId });
 }
 
-export function updateAccount(clientId: string, id: string, patch: { name?: string; isActive?: boolean }) {
+export function updateAccount(
+  clientId: string,
+  id: string,
+  patch: { name?: string; isActive?: boolean; subtype?: AccountSubtype },
+) {
   return apiFetch<Account>(`/accounts/${id}`, { method: 'PATCH', body: patch, clientId });
+}
+
+export function findOrCreateAccount(clientId: string, input: { name: string; type: AccountType }) {
+  return apiFetch<Account>('/accounts/find-or-create', { method: 'POST', body: input, clientId });
 }

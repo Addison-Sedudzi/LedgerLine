@@ -44,6 +44,29 @@
     border-top: 1px solid var(--rule);
     padding-top: 4px;
   }
+
+  /* The Ledger page's T-accounts print in plain black on white — no accent colours, no
+     highlight backgrounds — so a printed page photocopies and scans cleanly. Overrides
+     Figure's inline negative-amount colour too, since !important in a stylesheet beats a
+     plain inline style. */
+  .t-account,
+  .t-account * {
+    color: #000 !important;
+    background: #fff !important;
+    border-color: #000 !important;
+  }
+
+  .t-account-row {
+    cursor: default !important;
+  }
+
+  /* Financial statements print in plain black on white too. */
+  .statements-print,
+  .statements-print * {
+    color: #000 !important;
+    background: #fff !important;
+    border-color: #000 !important;
+  }
 }
 
 .print-footer {

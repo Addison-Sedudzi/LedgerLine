@@ -1,4 +1,4 @@
-import { TrialBalanceResponse } from '@ledgerline/shared';
+import { AccountLedger, LedgerResponse, TrialBalanceResponse } from '@ledgerline/shared';
 import { apiFetch } from './apiClient';
 
 export interface GeneralLedgerLine {
@@ -39,4 +39,24 @@ export function getTrialBalance(clientId: string, asAt: string, includeDrafts = 
   return apiFetch<TrialBalanceResponse>(`/trial-balance?asAt=${asAt}&includeDrafts=${includeDrafts}`, {
     clientId,
   });
+}
+
+export function getTrialBalanceForPeriodRange(
+  clientId: string,
+  fromPeriodId: string,
+  toPeriodId: string,
+  includeDrafts = false,
+) {
+  return apiFetch<TrialBalanceResponse>(
+    `/trial-balance?fromPeriodId=${fromPeriodId}&toPeriodId=${toPeriodId}&includeDrafts=${includeDrafts}`,
+    { clientId },
+  );
+}
+
+export function getLedgerForPeriod(clientId: string, periodId: string) {
+  return apiFetch<LedgerResponse>(`/ledger?periodId=${periodId}`, { clientId });
+}
+
+export function getAccountLedgerForPeriod(clientId: string, accountId: string, periodId: string) {
+  return apiFetch<AccountLedger>(`/ledger/${accountId}?periodId=${periodId}`, { clientId });
 }

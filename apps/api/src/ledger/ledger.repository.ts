@@ -22,6 +22,18 @@ export interface TrialBalanceAccountRow {
   balance: string;
 }
 
+export interface PeriodLedgerLineRow {
+  account_id: string;
+  line_no: number;
+  entry_id: string;
+  entry_date: string;
+  entry_no: string | null;
+  narration: string;
+  description: string | null;
+  debit: string;
+  credit: string;
+}
+
 @Injectable()
 export class LedgerRepository {
   constructor(private readonly db: DatabaseService) {}
@@ -107,6 +119,44 @@ export class LedgerRepository {
                     ELSE SUM(jl.credit) - SUM(jl.debit) END) <> 0
        ORDER BY a.code`,
       [clientId, asAt],
+    );
+  }
+
+  // Every posted line for every account of this client within a date range, flat — one row
+  // per journal_lines row, not grouped. The Ledger page groups these into T-accounts per
+  // account in the service, per CLAUDE.md's map-at-the-boundary convention; this is the one
+  // query it groups from, so every account's page is built from a single round trip.
+  async ledgerLinesForPeriod(clientId: string, startDate: string, endDate: string): Promise<PeriodLedgerLineRow[]> {
+    return this.db.query<PeriodLedgerLineRow>(
+      `SELECT
+         jl.account_id, jl.line_no, je.id AS entry_id, je.entry_date, je.entry_no, je.narration,
+         jl.description, jl.debit::text, jl.credit::text
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       WHERE je.client_id = $1 AND je.status = 'POSTED' AND je.entry_date BETWEEN $2 AND $3
+       ORDER BY je.entry_date, je.entry_no, jl.line_no`,
+      [clientId, startDate, endDate],
+    );
+  }
+
+  // Same as ledgerLinesForPeriod but scoped to one account, for GET /ledger/:accountId — no
+  // reason to pull every other account's lines just to filter them back out afterward.
+  async ledgerLinesForAccountInPeriod(
+    clientId: string,
+    accountId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<PeriodLedgerLineRow[]> {
+    return this.db.query<PeriodLedgerLineRow>(
+      `SELECT
+         jl.account_id, jl.line_no, je.id AS entry_id, je.entry_date, je.entry_no, je.narration,
+         jl.description, jl.debit::text, jl.credit::text
+       FROM journal_lines jl
+       JOIN journal_entries je ON je.id = jl.entry_id
+       WHERE je.client_id = $1 AND jl.account_id = $2 AND je.status = 'POSTED'
+         AND je.entry_date BETWEEN $3 AND $4
+       ORDER BY je.entry_date, je.entry_no, jl.line_no`,
+      [clientId, accountId, startDate, endDate],
     );
   }
 

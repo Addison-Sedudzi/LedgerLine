@@ -27,7 +27,6 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder, 
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [creating, setCreating] = useState(false);
-  const [newCode, setNewCode] = useState('');
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<AccountType>('EXPENSE');
   const [createError, setCreateError] = useState<string | null>(null);
@@ -35,11 +34,10 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder, 
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: () => createAccount(clientId!, { code: newCode, name: newName, type: newType }),
+    mutationFn: () => createAccount(clientId!, { name: newName, type: newType }),
     onSuccess: (account) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId!) });
       onChange(account.id);
-      setNewCode('');
       setNewName('');
       setCreating(false);
       setQuery('');
@@ -161,7 +159,7 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder, 
                 <li
                   onMouseDown={() => {
                     setCreating(true);
-                    setNewCode(query);
+                    setNewName(query);
                     setCreateError(null);
                   }}
                   style={{
@@ -179,23 +177,14 @@ export function AccountPicker({ accounts, value, onChange, onNext, placeholder, 
 
           {creating && (
             <form onSubmit={handleCreateSubmit} style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  autoFocus
-                  required
-                  placeholder="Code"
-                  value={newCode}
-                  onChange={(e) => setNewCode(e.target.value)}
-                  style={{ width: 80, padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
-                />
-                <input
-                  required
-                  placeholder="Name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  style={{ flex: 1, padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
-                />
-              </div>
+              <input
+                autoFocus
+                required
+                placeholder="Name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                style={{ padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+              />
               <select
                 value={newType}
                 onChange={(e) => setNewType(e.target.value as AccountType)}

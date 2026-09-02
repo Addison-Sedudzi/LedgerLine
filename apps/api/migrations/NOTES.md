@@ -25,3 +25,9 @@ against a fresh schema.
   DELETE outright.
 - `009_documents.sql` — uploaded source documents, their Claude extraction and suggested
   coding, and a log of Claude API token usage for cost reporting.
+- `010_account_description.sql` — adds an optional free-text description column to accounts.
+- `011_fix_misclassified_accounts.sql` — one-off data fix reclassifying "Bank" from EXPENSE
+  to ASSET and renumbering it into the asset block; it had zero postings.
+- `012_account_subtype.sql` — adds a nullable subtype column (current/non-current asset or
+  liability, cost of sales/operating expense) with a type-matching CHECK constraint, and
+  backfills sensible defaults for every existing account.

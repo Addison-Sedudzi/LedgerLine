@@ -3,7 +3,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AppConfigService } from '../config/config.service';
 import { DatabaseService } from '../database/database.service';
 
-const MODEL = 'claude-sonnet-4-6';
+// Checked against https://docs.claude.com/en/docs/about-claude/models/overview. 'fast' is
+// the cheapest/quickest model, used for extraction and classification (structured-output
+// tasks where the model is reading and categorising, not composing prose); 'strong' is
+// used only where the task is actually writing something — narrative commentary. Every
+// call defaults to 'fast'; a caller must explicitly ask for 'strong'.
+export const MODELS = {
+  fast: 'claude-haiku-4-5-20251001',
+  strong: 'claude-sonnet-5',
+} as const;
+export type ModelTier = keyof typeof MODELS;
 
 export interface ClaudeCallResult {
   text: string;
@@ -32,8 +41,23 @@ export class ClaudeService {
     return this.client !== null;
   }
 
+  // Backs GET /ai/health: a real one-line round trip (not just "is a key present"), so a
+  // wrong or revoked key shows up the same way a missing one does.
+  async health(): Promise<{ configured: boolean; model?: string; text?: string; inputTokens?: number; outputTokens?: number }> {
+    if (!this.client) return { configured: false };
+    const result = await this.messages({
+      system: 'Reply with exactly one word: OK.',
+      userText: 'Health check.',
+      tier: 'fast',
+      maxTokens: 16,
+      purpose: 'health_check',
+    });
+    return { configured: true, model: MODELS.fast, text: result.text, inputTokens: result.inputTokens, outputTokens: result.outputTokens };
+  }
+
   private async logUsage(
     purpose: string,
+    model: string,
     inputTokens: number,
     outputTokens: number,
     clientId: string | null,
@@ -42,7 +66,7 @@ export class ClaudeService {
     await this.db.query(
       `INSERT INTO claude_api_calls (client_id, purpose, model, input_tokens, output_tokens, document_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [clientId, purpose, MODEL, inputTokens, outputTokens, documentId],
+      [clientId, purpose, model, inputTokens, outputTokens, documentId],
     );
   }
 
@@ -71,6 +95,7 @@ export class ClaudeService {
     userText?: string;
     document?: { base64: string; mediaType: string };
     maxTokens?: number;
+    tier?: ModelTier;
     purpose: string;
     clientId?: string | null;
     documentId?: string | null;
@@ -99,9 +124,10 @@ export class ClaudeService {
       content.push({ type: 'text', text: params.userText });
     }
 
+    const model = MODELS[params.tier ?? 'fast'];
     const response = await this.callWithRetry(() =>
       this.client!.messages.create({
-        model: MODEL,
+        model,
         max_tokens: params.maxTokens ?? 2048,
         system: params.system,
         messages: [{ role: 'user', content }],
@@ -110,6 +136,7 @@ export class ClaudeService {
 
     await this.logUsage(
       params.purpose,
+      model,
       response.usage.input_tokens,
       response.usage.output_tokens,
       params.clientId ?? null,

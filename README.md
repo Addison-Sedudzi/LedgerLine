@@ -100,16 +100,24 @@ never reaches the browser bundle.
    one. Fill in `apps/web/.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from
    the same project.
 
-6. **Run migrations and seed demo data**
+6. **Run migrations**
 
    ```
    npm run migrate -w apps/api
-   npm run seed -w apps/api
    ```
 
-   The seed script creates a demo client (Adepa Traders Ltd), a chart of accounts, six
-   fiscal periods (five closed, one open), and around 40 posted transactions. It prints the
-   trial balance total and fails loudly if the books don't balance.
+   This alone leaves you with an empty database — accounts, periods, and journal entries are
+   entered through the app itself (an admin user can create a client and a fiscal period from
+   the header once signed in).
+
+   To load demo data instead (for trying the app or as a reference dataset — not something a
+   real client's books should ever start from), run `npm run seed:demo -w apps/api`. This is
+   never run automatically by anything in this repo. It creates a demo client (Adepa Traders
+   Ltd), a chart of accounts, six fiscal periods (five closed, one open), and around 40 posted
+   transactions, and prints the trial balance total, failing loudly if the books don't balance.
+   Demo data is real posted ledger data once created: LedgerLine enforces that a posted journal
+   entry is immutable (see CLAUDE.md), so seeded entries can never be deleted, only left
+   unused — don't run this against a database you intend to use for real bookkeeping.
 
 7. **Run both apps**
 

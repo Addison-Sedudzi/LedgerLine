@@ -13,3 +13,10 @@ export interface Period {
 export function listPeriods(clientId: string) {
   return apiFetch<Period[]>('/periods', { clientId });
 }
+
+export function createPeriod(
+  clientId: string,
+  input: { name: string; startDate: string; endDate: string },
+) {
+  return apiFetch<Period>('/periods', { method: 'POST', body: input, clientId });
+}

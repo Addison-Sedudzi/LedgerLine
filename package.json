@@ -13,7 +13,7 @@
     "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web && npm run typecheck -w packages/shared",
     "test": "npm run test -w apps/api",
     "migrate": "npm run migrate -w apps/api",
-    "seed": "npm run seed -w apps/api"
+    "seed:demo": "npm run seed:demo -w apps/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

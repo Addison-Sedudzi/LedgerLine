@@ -42,4 +42,26 @@ export class PeriodsRepository {
     );
     return result.rows[0] ?? null;
   }
+
+  async findByStartDate(clientId: string, startDate: string): Promise<PeriodRow | null> {
+    const rows = await this.db.query<PeriodRow>(
+      'SELECT * FROM fiscal_periods WHERE client_id = $1 AND start_date = $2',
+      [clientId, startDate],
+    );
+    return rows[0] ?? null;
+  }
+
+  // Status is always OPEN on creation — closing a period is a separate, deliberate action,
+  // never something implied by how a period is set up.
+  async create(
+    clientId: string,
+    input: { name: string; startDate: string; endDate: string },
+  ): Promise<PeriodRow> {
+    const rows = await this.db.query<PeriodRow>(
+      `INSERT INTO fiscal_periods (client_id, name, start_date, end_date, status)
+       VALUES ($1, $2, $3, $4, 'OPEN') RETURNING *`,
+      [clientId, input.name, input.startDate, input.endDate],
+    );
+    return rows[0];
+  }
 }

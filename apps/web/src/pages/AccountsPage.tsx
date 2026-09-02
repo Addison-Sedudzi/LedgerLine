@@ -1,29 +1,49 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Account, AccountType } from '@ledgerline/shared';
+import { Account, AccountSubtype, AccountType } from '@ledgerline/shared';
 import { useAuth } from '../context/AuthContext';
 import { useClientPeriod } from '../context/ClientPeriodContext';
 import { createAccount, listAccounts, updateAccount } from '../api/accounts';
 import { queryKeys } from '../api/queryKeys';
 import { LedgerTable } from '../components/LedgerTable';
+import { EmptyState } from '../components/EmptyState';
 import { ApiError } from '../api/apiClient';
 
 const TYPE_ORDER: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
 
+// Mirrors the database's accounts_subtype_matches_type CHECK constraint. Income and equity
+// accounts have no subtype in this build, so they get no dropdown at all.
+const SUBTYPE_OPTIONS_BY_TYPE: Partial<Record<AccountType, AccountSubtype[]>> = {
+  ASSET: ['CURRENT_ASSET', 'NON_CURRENT_ASSET'],
+  LIABILITY: ['CURRENT_LIABILITY', 'NON_CURRENT_LIABILITY'],
+  EXPENSE: ['COST_OF_SALES', 'OPERATING_EXPENSE'],
+};
+
+const SUBTYPE_LABEL: Record<AccountSubtype, string> = {
+  CURRENT_ASSET: 'Current asset',
+  NON_CURRENT_ASSET: 'Non-current asset',
+  CURRENT_LIABILITY: 'Current liability',
+  NON_CURRENT_LIABILITY: 'Non-current liability',
+  COST_OF_SALES: 'Cost of sales',
+  OPERATING_EXPENSE: 'Operating expense',
+};
+
+// Code is assigned server-side (AccountsService.nextCode) from the type's numbering block —
+// the bookkeeper picks a type and a name, never a code.
 function NewAccountForm({ clientId, onDone }: { clientId: string; onDone: () => void }) {
   const queryClient = useQueryClient();
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('EXPENSE');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => createAccount(clientId, { code, name, type }),
+    mutationFn: () => createAccount(clientId, { name, type, description: description || undefined }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId) });
-      setCode('');
       setName('');
+      setDescription('');
       onDone();
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to create account'),
@@ -38,47 +58,48 @@ function NewAccountForm({ clientId, onDone }: { clientId: string; onDone: () => 
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-end', marginBottom: 'var(--space-4)' }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}
     >
+      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+        <label style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
+          Type
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as AccountType)}
+            style={{ display: 'block', padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+          >
+            {TYPE_ORDER.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ fontSize: 12, color: 'var(--ink-muted)', flex: 1 }}>
+          Name
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{ display: 'block', width: '100%', padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)' }}
+        >
+          Add account
+        </button>
+      </div>
       <label style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
-        Code
+        Description (optional)
         <input
-          required
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          style={{ display: 'block', padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)', width: 100 }}
-        />
-      </label>
-      <label style={{ fontSize: 12, color: 'var(--ink-muted)', flex: 1 }}>
-        Name
-        <input
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           style={{ display: 'block', width: '100%', padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
         />
       </label>
-      <label style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
-        Type
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value as AccountType)}
-          style={{ display: 'block', padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
-        >
-          {TYPE_ORDER.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)' }}
-      >
-        Add account
-      </button>
       {error && <span style={{ color: 'var(--alarm)', fontSize: 12 }}>{error}</span>}
     </form>
   );
@@ -102,7 +123,7 @@ export function AccountsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (input: { id: string; patch: { name?: string; isActive?: boolean } }) =>
+    mutationFn: (input: { id: string; patch: { name?: string; isActive?: boolean; subtype?: AccountSubtype } }) =>
       updateAccount(clientId!, input.id, input.patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId!) });
@@ -159,7 +180,9 @@ export function AccountsPage() {
         )}
       </div>
 
-      {isAdmin && showNewForm && <NewAccountForm clientId={clientId!} onDone={() => setShowNewForm(false)} />}
+      {isAdmin && showNewForm && (
+        <NewAccountForm clientId={clientId!} onDone={() => setShowNewForm(false)} />
+      )}
 
       <input
         placeholder="Search by code or name…"
@@ -167,6 +190,15 @@ export function AccountsPage() {
         onChange={(e) => setSearch(e.target.value)}
         style={{ padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)', marginBottom: 'var(--space-4)', width: 300 }}
       />
+
+      {accounts.length === 0 && (
+        <EmptyState
+          title="No accounts yet."
+          action={isAdmin ? <span>Use "New account" above to add the first one.</span> : undefined}
+        />
+      )}
+
+      {accounts.length > 0 && filtered.length === 0 && <EmptyState title="No accounts match your search." />}
 
       {TYPE_ORDER.map((type) => {
         const group = filtered.filter((a) => a.type === type);
@@ -180,6 +212,36 @@ export function AccountsPage() {
               columns={[
                 { key: 'code', header: 'Code', render: (a) => <span className="mono">{a.code}</span> },
                 { key: 'name', header: 'Name', render: renderName },
+                {
+                  key: 'description',
+                  header: 'Description',
+                  render: (a) => <span style={{ color: 'var(--ink-muted)' }}>{a.description ?? '—'}</span>,
+                },
+                {
+                  key: 'subtype',
+                  header: 'Subtype',
+                  render: (a) => {
+                    const options = SUBTYPE_OPTIONS_BY_TYPE[a.type];
+                    if (!options) return <span style={{ color: 'var(--ink-muted)' }}>—</span>;
+                    if (!isAdmin) return a.subtype ? SUBTYPE_LABEL[a.subtype] : '—';
+                    return (
+                      <select
+                        value={a.subtype ?? ''}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          updateMutation.mutate({ id: a.id, patch: { subtype: e.target.value as AccountSubtype } })
+                        }
+                        style={{ padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+                      >
+                        {options.map((s) => (
+                          <option key={s} value={s}>
+                            {SUBTYPE_LABEL[s]}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  },
+                },
                 { key: 'postable', header: 'Postable', render: (a) => (a.isPostable ? 'Yes' : 'No — has sub-accounts') },
                 { key: 'active', header: 'Active', render: (a) => (a.isActive ? 'Yes' : 'No') },
                 {

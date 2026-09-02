@@ -1,8 +1,13 @@
-import { ReactNode } from 'react';
+import { CSSProperties, FormEvent, ReactNode, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserRole } from '@ledgerline/shared';
 import { useAuth } from '../context/AuthContext';
 import { useClientPeriod } from '../context/ClientPeriodContext';
+import { createClient } from '../api/me';
+import { createPeriod } from '../api/periods';
+import { queryKeys } from '../api/queryKeys';
+import { ApiError } from '../api/apiClient';
 import { PeriodBadge } from './PeriodBadge';
 
 interface NavItem {
@@ -30,7 +35,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Review',
-    items: [{ to: '/audit', label: 'Audit trail', roles: ['reviewer', 'admin'] }],
+    items: [
+      { to: '/ledger', label: 'Ledger' },
+      { to: '/audit', label: 'Audit trail', roles: ['reviewer', 'admin'] },
+    ],
   },
   {
     label: 'Reports',
@@ -45,10 +53,194 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+// Small popover trigger + form shared shape for the two "start fresh" actions below: a
+// "+" button that reveals a compact inline form, admin-only since both correspond to
+// admin-restricted POST endpoints server-side.
+const popoverStyle: CSSProperties = {
+  position: 'absolute',
+  zIndex: 20,
+  top: '100%',
+  left: 0,
+  marginTop: 4,
+  background: 'var(--paper)',
+  border: '1px solid var(--rule)',
+  borderRadius: 'var(--radius)',
+  padding: 8,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  width: 220,
+};
+
+function NewClientForm({ onCreated }: { onCreated: (id: string) => void }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [businessType, setBusinessType] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => createClient({ name, businessType: businessType || undefined }),
+    onSuccess: (client) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      onCreated(client.id);
+      setName('');
+      setBusinessType('');
+      setOpen(false);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to create client'),
+  });
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    mutation.mutate();
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="New client"
+        style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--radius)', padding: '6px 8px', cursor: 'pointer' }}
+      >
+        + Client
+      </button>
+      {open && (
+        <form onSubmit={handleSubmit} style={popoverStyle}>
+          <input
+            autoFocus
+            required
+            placeholder="Client name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{ padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+          />
+          <input
+            placeholder="Business type (optional)"
+            value={businessType}
+            onChange={(e) => setBusinessType(e.target.value)}
+            style={{ padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+          />
+          {error && <span style={{ color: 'var(--alarm)', fontSize: 12 }}>{error}</span>}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              style={{ padding: '4px 10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)' }}
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              style={{ padding: '4px 10px', border: '1px solid var(--rule)', background: 'var(--paper)', borderRadius: 'var(--radius)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function NewPeriodForm({ clientId, onCreated }: { clientId: string; onCreated: (id: string) => void }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => createPeriod(clientId, { name, startDate, endDate }),
+    onSuccess: (period) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.periods(clientId) });
+      onCreated(period.id);
+      setName('');
+      setStartDate('');
+      setEndDate('');
+      setOpen(false);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to create period'),
+  });
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    mutation.mutate();
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="New period"
+        style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--radius)', padding: '6px 8px', cursor: 'pointer' }}
+      >
+        + Period
+      </button>
+      {open && (
+        <form onSubmit={handleSubmit} style={popoverStyle}>
+          <input
+            autoFocus
+            required
+            placeholder="Period name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{ padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+          />
+          <label style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+            Start date
+            <input
+              required
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              style={{ display: 'block', width: '100%', padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+            />
+          </label>
+          <label style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+            End date
+            <input
+              required
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              style={{ display: 'block', width: '100%', padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+            />
+          </label>
+          {error && <span style={{ color: 'var(--alarm)', fontSize: 12 }}>{error}</span>}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              style={{ padding: '4px 10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)' }}
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              style={{ padding: '4px 10px', border: '1px solid var(--rule)', background: 'var(--paper)', borderRadius: 'var(--radius)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export function Layout(): ReactNode {
   const { me, signOut } = useAuth();
   const { clientId, clients, periodId, periods, period, setClientId, setPeriodId, isPeriodClosed } =
     useClientPeriod();
+  const isAdmin = me?.role === 'admin';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -128,6 +320,7 @@ export function Layout(): ReactNode {
               </option>
             ))}
           </select>
+          {isAdmin && <NewClientForm onCreated={setClientId} />}
 
           <select
             value={periodId ?? ''}
@@ -140,6 +333,7 @@ export function Layout(): ReactNode {
               </option>
             ))}
           </select>
+          {isAdmin && clientId && <NewPeriodForm clientId={clientId} onCreated={setPeriodId} />}
 
           {period && <PeriodBadge name={period.name} status={period.status} />}
         </header>

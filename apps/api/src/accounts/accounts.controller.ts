@@ -6,6 +6,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
+import { FindOrCreateAccountDto } from './dto/find-or-create-account.dto';
 
 @Controller('accounts')
 @UseGuards(ClientScopeGuard)
@@ -42,6 +43,14 @@ export class AccountsController {
   @Roles('admin')
   create(@CurrentClientId() clientId: string, @Body() dto: CreateAccountDto) {
     return this.accounts.create(clientId, dto);
+  }
+
+  // Used by the journal entry form's free-text account field. Same admin-only restriction
+  // as create() — this still creates accounts, just via a name lookup instead of a code.
+  @Post('find-or-create')
+  @Roles('admin')
+  findOrCreate(@CurrentClientId() clientId: string, @Body() dto: FindOrCreateAccountDto) {
+    return this.accounts.findOrCreate(clientId, dto);
   }
 
   @Patch(':id')

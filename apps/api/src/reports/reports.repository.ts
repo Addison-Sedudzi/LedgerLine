@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AccountType } from '@ledgerline/shared';
+import { AccountSubtype, AccountType } from '@ledgerline/shared';
 import { DatabaseService } from '../database/database.service';
 
 export interface AccountBalanceLine {
@@ -7,6 +7,7 @@ export interface AccountBalanceLine {
   code: string;
   name: string;
   balance: string;
+  subtype: AccountSubtype | null;
 }
 
 @Injectable()
@@ -18,12 +19,12 @@ export class ReportsRepository {
   async balancesByType(clientId: string, type: AccountType, asAt: string): Promise<AccountBalanceLine[]> {
     const sign = type === 'ASSET' ? 'SUM(jl.debit) - SUM(jl.credit)' : 'SUM(jl.credit) - SUM(jl.debit)';
     return this.db.query<AccountBalanceLine>(
-      `SELECT a.id AS account_id, a.code, a.name, COALESCE(${sign}, 0)::text AS balance
+      `SELECT a.id AS account_id, a.code, a.name, a.subtype, COALESCE(${sign}, 0)::text AS balance
        FROM accounts a
        LEFT JOIN journal_lines jl ON jl.account_id = a.id
        LEFT JOIN journal_entries je ON je.id = jl.entry_id AND je.status = 'POSTED' AND je.entry_date <= $3
        WHERE a.client_id = $1 AND a.type = $2 AND a.is_postable = true
-       GROUP BY a.id, a.code, a.name
+       GROUP BY a.id, a.code, a.name, a.subtype
        HAVING COALESCE(${sign}, 0) <> 0
        ORDER BY a.code`,
       [clientId, type, asAt],
@@ -43,13 +44,13 @@ export class ReportsRepository {
   ): Promise<AccountBalanceLine[]> {
     const sign = type === 'EXPENSE' ? 'SUM(jl.debit) - SUM(jl.credit)' : 'SUM(jl.credit) - SUM(jl.debit)';
     return this.db.query<AccountBalanceLine>(
-      `SELECT a.id AS account_id, a.code, a.name, COALESCE(${sign}, 0)::text AS balance
+      `SELECT a.id AS account_id, a.code, a.name, a.subtype, COALESCE(${sign}, 0)::text AS balance
        FROM accounts a
        JOIN journal_lines jl ON jl.account_id = a.id
        JOIN journal_entries je ON je.id = jl.entry_id
        WHERE a.client_id = $1 AND a.type = $2 AND je.status = 'POSTED'
          AND je.entry_date BETWEEN $3 AND $4
-       GROUP BY a.id, a.code, a.name
+       GROUP BY a.id, a.code, a.name, a.subtype
        HAVING COALESCE(${sign}, 0) <> 0
        ORDER BY a.code`,
       [clientId, type, from, to],

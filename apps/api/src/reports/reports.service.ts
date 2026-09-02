@@ -88,7 +88,11 @@ export class ReportsService {
     };
   }
 
-  async balanceSheet(clientId: string, asAt: string, comparative: boolean) {
+  // profitFromDate: what date the "profit not yet closed to equity" figure accumulates
+  // from. Defaults to calendar-year start (the existing behaviour every other caller
+  // relies on); the range-based statements() method below passes the user's own chosen
+  // "From" date instead, since that's the period actually being reported on.
+  async balanceSheet(clientId: string, asAt: string, comparative: boolean, profitFromDate?: string) {
     const [assetRows, liabilityRows, equityRows] = await Promise.all([
       this.reports.balancesByType(clientId, 'ASSET', asAt),
       this.reports.balancesByType(clientId, 'LIABILITY', asAt),
@@ -98,7 +102,7 @@ export class ReportsService {
     // Profit not yet closed to retained earnings still belongs to equity for the balance
     // sheet to balance; year-end closing (which would move it into retained earnings
     // permanently) is out of scope for this build.
-    const yearStart = asAt.slice(0, 4) + '-01-01';
+    const yearStart = profitFromDate ?? asAt.slice(0, 4) + '-01-01';
     const [incomeRows, expenseRows] = await Promise.all([
       this.reports.movementByTypeInRange(clientId, 'INCOME', yearStart, asAt),
       this.reports.movementByTypeInRange(clientId, 'EXPENSE', yearStart, asAt),
@@ -162,6 +166,81 @@ export class ReportsService {
       totalLiabilitiesAndEquity: totalLiabilitiesAndEquity.toString(),
       balances,
       comparative: priorTotals,
+    };
+  }
+
+  // Income and expenses for an arbitrary date range spanning one or more periods, rather
+  // than a single period — what the "Prepare financial statements" button on the Trial
+  // Balance page generates from. Splits expenses into cost of sales and operating expense
+  // by each account's subtype, and shows a gross profit subtotal only when at least one
+  // cost-of-sales account actually has movement in the range — an entry never gains a
+  // gross-profit line just because a COST_OF_SALES account exists but wasn't posted to.
+  async incomeStatementForRange(clientId: string, from: string, to: string) {
+    const [incomeRows, expenseRows] = await Promise.all([
+      this.reports.movementByTypeInRange(clientId, 'INCOME', from, to),
+      this.reports.movementByTypeInRange(clientId, 'EXPENSE', from, to),
+    ]);
+
+    const income = toLines(incomeRows);
+    const costOfSalesRows = expenseRows.filter((r) => r.subtype === 'COST_OF_SALES');
+    const operatingRows = expenseRows.filter((r) => r.subtype !== 'COST_OF_SALES');
+    const costOfSales = toLines(costOfSalesRows);
+    const operatingExpenses = toLines(operatingRows);
+
+    const totalIncome = sumMoney(income.map((r) => r.amount));
+    const totalCostOfSales = sumMoney(costOfSales.map((r) => r.amount));
+    const totalOperatingExpenses = sumMoney(operatingExpenses.map((r) => r.amount));
+    const hasCostOfSales = costOfSales.length > 0;
+    const grossProfit = totalIncome.subtract(totalCostOfSales);
+    const profitForPeriod = totalIncome.subtract(totalCostOfSales).subtract(totalOperatingExpenses);
+
+    return {
+      client: { id: clientId },
+      from,
+      to,
+      basisOfPreparation: 'Prepared on the accrual basis in accordance with IFRS for SMEs.',
+      income,
+      totalIncome: totalIncome.toString(),
+      hasCostOfSales,
+      costOfSales,
+      totalCostOfSales: totalCostOfSales.toString(),
+      grossProfit: grossProfit.toString(),
+      operatingExpenses,
+      totalOperatingExpenses: totalOperatingExpenses.toString(),
+      profitForPeriod: profitForPeriod.toString(),
+    };
+  }
+
+  // The two statements the "Prepare financial statements" button produces (cash flow and
+  // changes in equity were explicitly out of scope for this pass — see docs/cut-scope.md).
+  // Both are computed from the same movementByTypeInRange/balancesByType queries the
+  // Ledger and Trial Balance pages use, so all three can never disagree about what a
+  // posted line means.
+  async statements(clientId: string, fromPeriodId: string, toPeriodId: string) {
+    const [fromPeriod, toPeriod] = await Promise.all([
+      this.periods.findById(clientId, fromPeriodId),
+      this.periods.findById(clientId, toPeriodId),
+    ]);
+    if (!fromPeriod) throw new NotFoundError('Period', fromPeriodId);
+    if (!toPeriod) throw new NotFoundError('Period', toPeriodId);
+    if (toPeriod.end_date < fromPeriod.start_date) {
+      throw new ValidationError('The "to" period cannot end before the "from" period starts');
+    }
+
+    const [incomeStatement, balanceSheet] = await Promise.all([
+      this.incomeStatementForRange(clientId, fromPeriod.start_date, toPeriod.end_date),
+      this.balanceSheet(clientId, toPeriod.end_date, false, fromPeriod.start_date),
+    ]);
+
+    return {
+      range: {
+        fromPeriodId,
+        toPeriodId,
+        fromDate: fromPeriod.start_date,
+        toDate: toPeriod.end_date,
+      },
+      incomeStatement,
+      balanceSheet,
     };
   }
 }

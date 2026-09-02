@@ -1,18 +1,12 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import * as jwt from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { AppConfigService } from '../../config/config.service';
 import { DatabaseService } from '../../database/database.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthenticatedUser } from '../types/authenticated-user';
 import { UserRole } from '@ledgerline/shared';
-
-interface SupabaseJwtPayload {
-  sub: string;
-  email?: string;
-  exp: number;
-}
 
 interface UserRow {
   id: string;
@@ -23,13 +17,21 @@ interface UserRow {
 
 // Verifies the Supabase access token on every request and attaches the matching application
 // user to it. Global by default; endpoints opt out with @Public() (the health check only).
+//
+// Supabase projects sign session tokens with an asymmetric JWT Signing Key, not the legacy
+// shared secret, so verification fetches the project's public keys from its JWKS endpoint
+// (fetched once, cached in memory by jose) rather than comparing against a static secret.
 @Injectable()
 export class AuthGuard implements CanActivate {
+  private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
+
   constructor(
     private readonly reflector: Reflector,
     private readonly config: AppConfigService,
     private readonly db: DatabaseService,
-  ) {}
+  ) {
+    this.jwks = createRemoteJWKSet(new URL(`${this.config.supabaseUrl}/auth/v1/.well-known/jwks.json`));
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -45,16 +47,18 @@ export class AuthGuard implements CanActivate {
     }
     const token = header.slice('Bearer '.length);
 
-    let payload: SupabaseJwtPayload;
+    let sub: string | undefined;
     try {
-      payload = jwt.verify(token, this.config.supabaseJwtSecret) as SupabaseJwtPayload;
+      const { payload } = await jwtVerify(token, this.jwks);
+      sub = payload.sub;
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
+    if (!sub) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
 
-    const rows = await this.db.query<UserRow>('SELECT id, email, full_name, role FROM users WHERE id = $1', [
-      payload.sub,
-    ]);
+    const rows = await this.db.query<UserRow>('SELECT id, email, full_name, role FROM users WHERE id = $1', [sub]);
     const row = rows[0];
     if (!row) {
       throw new UnauthorizedException('Token does not match a known user');

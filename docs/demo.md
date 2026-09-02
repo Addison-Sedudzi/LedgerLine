@@ -1,6 +1,6 @@
 # Demo script (about 5 minutes)
 
-Assumes the seed data is loaded (`npm run migrate && npm run seed`) and you're signed in as
+Assumes the demo data is loaded (`npm run migrate && npm run seed:demo -w apps/api`) and you're signed in as
 `reviewer@ledgerline.demo` so posting and reversal controls are visible.
 
 ## 1. Show the books already agree (30 seconds)

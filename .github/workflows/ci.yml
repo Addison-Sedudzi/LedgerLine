@@ -45,7 +45,7 @@ jobs:
       - run: npm run migrate -w apps/api
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - run: npm run seed -w apps/api
+      - run: npm run seed:demo -w apps/api
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: npm run test:accounting -w apps/api

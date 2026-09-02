@@ -21,3 +21,7 @@ export function getMe() {
 export function listClients() {
   return apiFetch<ClientSummary[]>('/clients');
 }
+
+export function createClient(input: { name: string; businessType?: string }) {
+  return apiFetch<ClientSummary>('/clients', { method: 'POST', body: input });
+}

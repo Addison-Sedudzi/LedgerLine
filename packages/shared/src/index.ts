@@ -4,6 +4,7 @@
 // exports compile to statically analysable property getters instead.
 export type {
   AccountType,
+  AccountSubtype,
   NormalBalance,
   PeriodStatus,
   JournalEntryStatus,
@@ -17,5 +18,8 @@ export type {
   JournalEntry,
   TrialBalanceRow,
   TrialBalanceResponse,
+  LedgerLine,
+  AccountLedger,
+  LedgerResponse,
 } from './types';
 export { Money, sumMoney } from './money';

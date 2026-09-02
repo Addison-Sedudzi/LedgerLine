@@ -15,6 +15,7 @@ import { JournalModule } from './journal/journal.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { ReportsModule } from './reports/reports.module';
 import { DocumentsModule } from './documents/documents.module';
+import { IntelligenceModule } from './intelligence/intelligence.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DocumentsModule } from './documents/documents.module';
     JournalModule,
     LedgerModule,
     ReportsModule,
+    IntelligenceModule,
     DocumentsModule,
   ],
   providers: [

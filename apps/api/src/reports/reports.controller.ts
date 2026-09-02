@@ -30,6 +30,16 @@ export class ReportsController {
     return this.reports.balanceSheet(clientId, asAt, comparative === 'true');
   }
 
+  // Backs the Trial Balance page's "Prepare financial statements" button.
+  @Get('statements')
+  statements(
+    @CurrentClientId() clientId: string,
+    @Query('fromPeriodId') fromPeriodId: string,
+    @Query('toPeriodId') toPeriodId: string,
+  ) {
+    return this.reports.statements(clientId, fromPeriodId, toPeriodId);
+  }
+
   @Get('statement-pack')
   async statementPack(
     @CurrentClientId() clientId: string,

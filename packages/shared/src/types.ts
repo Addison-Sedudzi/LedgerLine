@@ -3,6 +3,16 @@
 
 export type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
 
+// Sub-classification within a type, used to build financial statement sections. Nullable —
+// income and equity accounts don't use it in this build.
+export type AccountSubtype =
+  | 'CURRENT_ASSET'
+  | 'NON_CURRENT_ASSET'
+  | 'CURRENT_LIABILITY'
+  | 'NON_CURRENT_LIABILITY'
+  | 'COST_OF_SALES'
+  | 'OPERATING_EXPENSE';
+
 export type NormalBalance = 'DEBIT' | 'CREDIT';
 
 export type PeriodStatus = 'OPEN' | 'CLOSED';
@@ -39,6 +49,8 @@ export interface Account {
   parentId: string | null;
   isPostable: boolean;
   isActive: boolean;
+  description: string | null;
+  subtype: AccountSubtype | null;
 }
 
 export interface JournalLine {
@@ -91,4 +103,45 @@ export interface TrialBalanceResponse {
     divisibleByNine: boolean;
     matchesDoublePostedAmount: boolean;
   };
+}
+
+// One row on one side of a T-account: a single journal line, with enough of its parent
+// entry's detail (date, narration, entry number) to display and to link back to /journal/:id.
+export interface LedgerLine {
+  entryId: string;
+  lineNo: number;
+  entryDate: string;
+  entryNo: number | null;
+  narration: string;
+  description: string | null;
+  amount: MoneyAmount;
+}
+
+// A single account's T-account for a period: both sides' lines, both sides' totals, and the
+// balancing figure. balanceSide/isAbnormalBalance are derived from the sign of the balance
+// against the account's own normalBalance — the same convention trialBalance() uses, so the
+// two views can never compute a balance differently for the same account.
+export interface AccountLedger {
+  accountId: string;
+  code: string;
+  name: string;
+  type: AccountType;
+  debitLines: LedgerLine[];
+  creditLines: LedgerLine[];
+  totalDebit: MoneyAmount;
+  totalCredit: MoneyAmount;
+  balance: MoneyAmount;
+  balanceSide: NormalBalance;
+  isAbnormalBalance: boolean;
+}
+
+export interface LedgerResponse {
+  periodId: string;
+  // Every postable, active account, ordered ASSET/LIABILITY/EQUITY/INCOME/EXPENSE then by
+  // code — including ones with no lines this period, so the frontend's "show empty
+  // accounts" toggle is a client-side filter, not a second request.
+  accounts: AccountLedger[];
+  totalDebitBalances: MoneyAmount;
+  totalCreditBalances: MoneyAmount;
+  balanced: boolean;
 }
