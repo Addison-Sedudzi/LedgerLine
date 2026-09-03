@@ -8,6 +8,7 @@ import { queryKeys } from '../api/queryKeys';
 import { LedgerTable } from '../components/LedgerTable';
 import { StatusPill } from '../components/StatusPill';
 import { EmptyState } from '../components/EmptyState';
+import { formatDateTime } from '../utils/format';
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -119,7 +120,7 @@ export function DocumentsInboxPage() {
             { key: 'supplier', header: 'Supplier', render: (d) => d.extracted?.supplier ?? '—' },
             { key: 'total', header: 'Total', align: 'right', render: (d) => d.extracted?.total ?? '—' },
             { key: 'status', header: 'Status', render: (d) => <StatusPill label={d.status} /> },
-            { key: 'age', header: 'Uploaded', render: (d) => new Date(d.uploaded_at).toLocaleDateString() },
+            { key: 'age', header: 'Uploaded', render: (d) => formatDateTime(d.uploaded_at) },
           ]}
           rows={sorted}
           getRowKey={(d) => d.id}

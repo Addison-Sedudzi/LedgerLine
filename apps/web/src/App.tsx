@@ -33,6 +33,7 @@ export default function App() {
         <Route index element={<Navigate to="/journal" replace />} />
         <Route path="journal" element={<JournalListPage />} />
         <Route path="journal/new" element={<JournalEntryFormPage />} />
+        <Route path="journal/:id/edit" element={<JournalEntryFormPage />} />
         <Route path="journal/:id" element={<JournalEntryDetailPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="ledger" element={<LedgerPage />} />

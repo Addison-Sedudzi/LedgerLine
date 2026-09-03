@@ -10,6 +10,7 @@ import { AccountPicker } from '../components/AccountPicker';
 import { DateField } from '../components/DateField';
 import { Figure } from '../components/Figure';
 import { LedgerTable } from '../components/LedgerTable';
+import { formatMoney } from '../utils/format';
 
 export function DocumentReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -99,7 +100,7 @@ export function DocumentReviewPage() {
               Supplier: {doc.extracted.supplier ?? '—'} (confidence: {doc.extracted.confidence?.supplier ?? 'n/a'})
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
-              Total: {doc.extracted.total ?? '—'} (confidence: {doc.extracted.confidence?.total ?? 'n/a'})
+              Total: {doc.extracted.total ? formatMoney(doc.extracted.total) : '—'} (confidence: {doc.extracted.confidence?.total ?? 'n/a'})
             </div>
 
             <label style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
@@ -162,7 +163,7 @@ export function DocumentReviewPage() {
             </div>
 
             <p style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: 'var(--space-4)' }}>
-              Extracted by Claude, reviewed by you.
+              Extracted by AI, reviewed by you.
             </p>
           </div>
         ) : (

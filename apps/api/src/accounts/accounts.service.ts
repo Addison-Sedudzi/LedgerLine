@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { Account, AccountSubtype, AccountType, NormalBalance } from '@ledgerline/shared';
+import { Injectable, Logger } from '@nestjs/common';
+import { Account, AccountSubtype, AccountType, Confidence, NormalBalance } from '@ledgerline/shared';
 import { NotFoundError, ValidationError } from '../common/errors/domain-errors';
+import { AiService } from '../intelligence/ai.service';
+import { AuditService } from '../audit/audit.service';
+import { DatabaseService } from '../database/database.service';
 import { AccountsRepository, AccountRow } from './accounts.repository';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { FindOrCreateAccountDto } from './dto/find-or-create-account.dto';
 
 // The database speaks snake_case, matching its column names; the API boundary speaks
 // camelCase, matching the shared TypeScript types the frontend imports. See CLAUDE.md's
@@ -66,7 +68,14 @@ function defaultSubtype(type: AccountType): AccountSubtype | null {
 
 @Injectable()
 export class AccountsService {
-  constructor(private readonly repo: AccountsRepository) {}
+  private readonly logger = new Logger('AccountsService');
+
+  constructor(
+    private readonly repo: AccountsRepository,
+    private readonly ai: AiService,
+    private readonly audit: AuditService,
+    private readonly db: DatabaseService,
+  ) {}
 
   async list(clientId: string, filters: { type?: AccountType; active?: boolean }): Promise<Account[]> {
     const rows = await this.repo.findAll(clientId, filters);
@@ -134,46 +143,69 @@ export class AccountsService {
     return toAccountDto(account);
   }
 
-  // Used by the journal entry form's free-text account field: a name that already exists
-  // resolves straight to that account (whatever type button was clicked is ignored — an
-  // existing account's type is never silently reinterpreted), and a name that doesn't
-  // exist yet is created on the spot with a server-assigned code, exactly like create()
-  // does when no code is supplied.
-  async findOrCreate(clientId: string, dto: FindOrCreateAccountDto): Promise<Account> {
-    const existing = await this.repo.findByName(clientId, dto.name);
-    if (existing) return toAccountDto(existing);
-
-    const code = await this.nextCode(clientId, dto.type);
-    const account = await this.repo.create(clientId, {
-      code,
-      name: dto.name,
-      type: dto.type,
-      normalBalance: deriveNormalBalance(dto.type),
-      parentId: null,
-      isPostable: true,
-      description: null,
-      subtype: defaultSubtype(dto.type),
-    });
-    return toAccountDto(account);
-  }
-
-  async update(clientId: string, id: string, dto: UpdateAccountDto): Promise<Account> {
+  async update(clientId: string, actorId: string, id: string, dto: UpdateAccountDto): Promise<Account> {
     // Deactivating is always allowed, postings or not — it stops future use without
-    // touching history. Type is not editable through this DTO at all: changing the type of
-    // an account that already has postings would silently reinterpret its whole history,
-    // so the only way to "change" a type is to deactivate the old account and create a new
-    // one.
+    // touching history. Renaming is always allowed too — a label change never reinterprets
+    // arithmetic. Type is different: changing it after the account has real postings would
+    // silently reinterpret that history (an EXPENSE line quietly becoming an ASSET line),
+    // so it is only ever allowed while the account has zero postings — the same guard
+    // delete() already uses for the same reason. Caught early, a wrong-type mistake is
+    // fixed by editing it directly; caught late, the only honest fix is to deactivate the
+    // mistaken account and post correctly to a new one from here on.
     const existing = await this.getOne(clientId, id);
-    if (dto.subtype !== undefined && !SUBTYPES_BY_TYPE[existing.type].includes(dto.subtype)) {
-      throw new ValidationError(
-        `"${dto.subtype}" is not a valid subtype for a ${existing.type} account`,
-      );
+    const targetType = dto.type ?? existing.type;
+
+    if (dto.subtype !== undefined && !SUBTYPES_BY_TYPE[targetType].includes(dto.subtype)) {
+      throw new ValidationError(`"${dto.subtype}" is not a valid subtype for a ${targetType} account`);
     }
-    const updated = await this.repo.update(clientId, id, dto);
-    return toAccountDto(updated);
+
+    const patch: Parameters<AccountsRepository['update']>[2] = {
+      name: dto.name,
+      isActive: dto.isActive,
+      subtype: dto.subtype,
+    };
+
+    if (dto.type !== undefined && dto.type !== existing.type) {
+      const hasPostings = await this.repo.hasPostings(clientId, id);
+      if (hasPostings) {
+        throw new ValidationError(
+          `Account ${existing.code} has postings against it and its type cannot be changed. ` +
+            `Deactivate it and post to a new account instead.`,
+        );
+      }
+      patch.type = dto.type;
+      patch.normalBalance = deriveNormalBalance(dto.type);
+      // The old code belongs to the old type's numbering block and would be misleading
+      // sitting under the new type — reassigned the same way a brand new account gets one.
+      patch.code = await this.nextCode(clientId, dto.type);
+      // A subtype the caller supplied for the new type is already validated above and
+      // takes precedence; otherwise fall back to that type's sensible default rather than
+      // silently keeping a subtype that belongs to the old type.
+      if (dto.subtype === undefined) {
+        patch.subtype = defaultSubtype(dto.type);
+      }
+    }
+
+    return this.db.transaction(async (client) => {
+      const updated = await this.repo.update(clientId, id, patch, client);
+      const after = toAccountDto(updated);
+      await this.audit.record(
+        {
+          actorId,
+          clientId,
+          action: 'UPDATE',
+          entityType: 'account',
+          entityId: id,
+          before: existing,
+          after,
+        },
+        client,
+      );
+      return after;
+    });
   }
 
-  async delete(clientId: string, id: string): Promise<void> {
+  async delete(clientId: string, actorId: string, id: string): Promise<void> {
     const account = await this.getOne(clientId, id);
     const hasPostings = await this.repo.hasPostings(clientId, id);
     if (hasPostings) {
@@ -185,6 +217,91 @@ export class AccountsService {
     if (hasChildren) {
       throw new ValidationError(`Account ${account.code} has sub-accounts and cannot be deleted.`);
     }
-    await this.repo.deleteById(clientId, id);
+    await this.db.transaction(async (client) => {
+      await this.repo.deleteById(clientId, id, client);
+      await this.audit.record(
+        {
+          actorId,
+          clientId,
+          action: 'DELETE',
+          entityType: 'account',
+          entityId: id,
+          before: account,
+        },
+        client,
+      );
+    });
+  }
+
+  // Backs the ghost account suggestion on the journal entry form. Never creates or changes
+  // anything — a pure read that offers a name for the bookkeeper to accept with Tab or
+  // ignore entirely. Cached by client + normalised description first, so the same typed
+  // word (e.g. "fuel") never reaches the AI twice; falls through to a real call only on a
+  // genuine cache miss, and only if a key is configured.
+  async suggest(clientId: string, description: string): Promise<{ accountId: string | null; accountName: string | null; confidence: Confidence | null }> {
+    const key = description.trim().toLowerCase();
+    if (!key) return { accountId: null, accountName: null, confidence: null };
+
+    const cached = await this.repo.findCachedSuggestion(clientId, key);
+    if (cached) {
+      if (!cached.account_id) return { accountId: null, accountName: null, confidence: null };
+      const account = await this.repo.findById(clientId, cached.account_id);
+      // The cached account may since have been deactivated or deleted — a stale hit is
+      // treated as no suggestion rather than offering something no longer valid.
+      if (!account || !account.is_active || !account.is_postable) {
+        return { accountId: null, accountName: null, confidence: null };
+      }
+      return { accountId: account.id, accountName: account.name, confidence: cached.confidence };
+    }
+
+    if (!this.ai.isConfigured) return { accountId: null, accountName: null, confidence: null };
+
+    const candidates = (await this.repo.findAll(clientId, { active: true })).filter((a) => a.is_postable);
+    if (candidates.length === 0) return { accountId: null, accountName: null, confidence: null };
+
+    const system = `You are suggesting the single most likely account for a line in a
+Ghanaian bookkeeping practice's journal entry, from a short free-text description the
+bookkeeper is still typing. Reply with JSON only, no prose, in this exact shape:
+{ "accountId": string | null, "confidence": "high" | "medium" | "low" }
+Pick accountId from the provided list of account ids only, or null if nothing fits well.`;
+    const userText = JSON.stringify({
+      description,
+      accounts: candidates.map((a) => ({ id: a.id, name: a.name, type: a.type })),
+    });
+
+    let accountId: string | null = null;
+    let confidence: Confidence | null = null;
+    try {
+      const result = await this.ai.messages({
+        system,
+        userText,
+        tier: 'fast',
+        maxTokens: 150,
+        timeoutMs: 8000,
+        purpose: 'account_suggestion',
+        clientId,
+      });
+      const parsed = JSON.parse(this.stripCodeFence(result.text)) as { accountId: string | null; confidence: Confidence };
+      // Never trust an id the model invents — only one from the list actually offered.
+      const match = parsed.accountId ? candidates.find((a) => a.id === parsed.accountId) : undefined;
+      if (match) {
+        accountId = match.id;
+        confidence = parsed.confidence;
+      }
+    } catch (err) {
+      this.logger.warn(`Account suggestion failed: ${(err as Error).message}`);
+    }
+
+    await this.repo.cacheSuggestion(clientId, key, accountId, confidence);
+    const account = accountId ? candidates.find((a) => a.id === accountId) : undefined;
+    return { accountId, accountName: account?.name ?? null, confidence };
+  }
+
+  private stripCodeFence(text: string): string {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('```')) {
+      return trimmed.replace(/^```[a-z]*\n?/i, '').replace(/```$/, '').trim();
+    }
+    return trimmed;
   }
 }

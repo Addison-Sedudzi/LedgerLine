@@ -5,10 +5,7 @@ import { getStatements } from '../api/reports';
 import { Figure } from '../components/Figure';
 import { ErrorState } from '../components/ErrorState';
 import { PrintButton, PrintFooter } from '../components/PrintFooter';
-
-function formatLongDate(iso: string): string {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+import { formatDate, formatMoney } from '../utils/format';
 
 // Print output must contain no em dashes at all — every Figure on this page passes "-" as
 // its zero placeholder instead of the app-wide default "—".
@@ -61,7 +58,7 @@ export function FinancialStatementsPage() {
           <div style={{ maxWidth: 640, marginBottom: 'var(--space-6)' }}>
             <h3>Income statement</h3>
             <p style={{ color: 'var(--ink-muted)', marginTop: 0 }}>
-              For the period {formatLongDate(data.range.fromDate)} to {formatLongDate(data.range.toDate)}
+              For the period {formatDate(data.range.fromDate)} to {formatDate(data.range.toDate)}
             </p>
             <p style={{ fontSize: 12, color: 'var(--ink-muted)' }}>{data.incomeStatement.basisOfPreparation}</p>
 
@@ -128,12 +125,14 @@ export function FinancialStatementsPage() {
 
           <div style={{ maxWidth: 640 }}>
             <h3>Statement of financial position</h3>
-            <p style={{ color: 'var(--ink-muted)', marginTop: 0 }}>As at {formatLongDate(data.balanceSheet.asAt)}</p>
+            <p style={{ color: 'var(--ink-muted)', marginTop: 0 }}>As at {formatDate(data.balanceSheet.asAt)}</p>
             <p style={{ fontSize: 12, color: 'var(--ink-muted)' }}>{data.balanceSheet.basisOfPreparation}</p>
 
             {!data.balanceSheet.balances && (
               <div style={{ marginBottom: 'var(--space-3)' }}>
-                <ErrorState message="This balance sheet does not balance. Check the trial balance before trusting it." />
+                <ErrorState
+                  message={`This balance sheet does not balance: total assets ${formatMoney(data.balanceSheet.totalAssets)} vs total liabilities and equity ${formatMoney(data.balanceSheet.totalLiabilitiesAndEquity)} (difference ${formatMoney(data.balanceSheet.difference)}). The figures below are shown as posted — check the trial balance to find the mistake.`}
+                />
               </div>
             )}
 

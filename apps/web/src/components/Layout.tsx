@@ -312,10 +312,16 @@ export function Layout(): ReactNode {
           <select
             value={clientId ?? ''}
             onChange={(e) => setClientId(e.target.value)}
-            style={{ padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+            style={{
+              padding: '6px 8px',
+              border: '1px solid var(--rule)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+            }}
           >
             {clients.map((c) => (
-              <option key={c.id} value={c.id}>
+              <option key={c.id} value={c.id} style={{ background: 'var(--paper)', color: 'var(--ink)' }}>
                 {c.name}
               </option>
             ))}
@@ -325,10 +331,16 @@ export function Layout(): ReactNode {
           <select
             value={periodId ?? ''}
             onChange={(e) => setPeriodId(e.target.value)}
-            style={{ padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+            style={{
+              padding: '6px 8px',
+              border: '1px solid var(--rule)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+            }}
           >
             {periods.map((p) => (
-              <option key={p.id} value={p.id}>
+              <option key={p.id} value={p.id} style={{ background: 'var(--paper)', color: 'var(--ink)' }}>
                 {p.name} ({p.status})
               </option>
             ))}

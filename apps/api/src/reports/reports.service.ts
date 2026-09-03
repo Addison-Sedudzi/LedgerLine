@@ -120,15 +120,11 @@ export class ReportsService {
     const totalEquity = sumMoney(equity.map((r) => r.amount)).add(profitToDate);
     const totalLiabilitiesAndEquity = totalLiabilities.add(totalEquity);
 
+    // An unbalanced sheet is shown, not hidden: the bookkeeper needs the actual figures in
+    // front of them to find the mistake, and `balances` (plus the difference below) is the
+    // signal the page renders as a warning above the numbers — never in place of them.
     const balances = totalAssets.equals(totalLiabilitiesAndEquity);
-    if (!balances) {
-      throw new ValidationError(
-        `The balance sheet does not balance as at ${asAt}: total assets ${totalAssets.toString()} vs total ` +
-          `liabilities and equity ${totalLiabilitiesAndEquity.toString()} (difference ${totalAssets
-            .subtract(totalLiabilitiesAndEquity)
-            .toString()}). Check the trial balance before trusting this statement.`,
-      );
-    }
+    const difference = totalAssets.subtract(totalLiabilitiesAndEquity);
 
     let priorTotals: { totalAssets: string; totalLiabilities: string; totalEquity: string } | undefined;
     if (comparative) {
@@ -165,6 +161,7 @@ export class ReportsService {
       totalEquity: totalEquity.toString(),
       totalLiabilitiesAndEquity: totalLiabilitiesAndEquity.toString(),
       balances,
+      difference: difference.toString(),
       comparative: priorTotals,
     };
   }

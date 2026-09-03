@@ -7,6 +7,7 @@ import { Figure } from '../components/Figure';
 import { ErrorState } from '../components/ErrorState';
 import { PrintButton, PrintFooter } from '../components/PrintFooter';
 import { Link } from 'react-router-dom';
+import { formatDate, formatMoney } from '../utils/format';
 
 function StatementRows({ lines }: { lines: StatementLine[] }) {
   return (
@@ -110,17 +111,19 @@ export function StatementsPage() {
       )}
 
       {tab === 'balance' && balanceQuery.isError && (
-        <ErrorState
-          message={
-            (balanceQuery.error as Error)?.message ??
-            'The balance sheet does not balance. Check the trial balance before trusting this statement.'
-          }
-        />
+        <ErrorState message={balanceQuery.error instanceof Error ? balanceQuery.error.message : 'Failed to load the balance sheet'} />
       )}
 
       {tab === 'balance' && balanceQuery.data && (
         <div style={{ maxWidth: 640 }}>
-          <p style={{ color: 'var(--ink-muted)' }}>As at {balanceQuery.data.asAt}</p>
+          {!balanceQuery.data.balances && (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <ErrorState
+                message={`This balance sheet does not balance: total assets ${formatMoney(balanceQuery.data.totalAssets)} vs total liabilities and equity ${formatMoney(balanceQuery.data.totalLiabilitiesAndEquity)} (difference ${formatMoney(balanceQuery.data.difference)}). The figures below are shown as posted — check the trial balance to find the mistake.`}
+              />
+            </div>
+          )}
+          <p style={{ color: 'var(--ink-muted)' }}>As at {formatDate(balanceQuery.data.asAt)}</p>
           <p style={{ fontSize: 12, color: 'var(--ink-muted)' }}>{balanceQuery.data.basisOfPreparation}</p>
 
           <h3 style={{ marginTop: 'var(--space-4)' }}>Assets</h3>

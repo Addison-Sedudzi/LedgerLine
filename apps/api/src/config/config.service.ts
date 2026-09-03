@@ -27,8 +27,8 @@ export class AppConfigService {
     return this.nest.get('SUPABASE_JWT_SECRET', { infer: true });
   }
 
-  get anthropicApiKey(): string | undefined {
-    return this.nest.get('ANTHROPIC_API_KEY', { infer: true });
+  get openaiApiKey(): string | undefined {
+    return this.nest.get('OPENAI_API_KEY', { infer: true });
   }
 
   get port(): number {

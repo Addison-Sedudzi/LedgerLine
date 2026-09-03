@@ -2,11 +2,13 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import { AccountType } from '@ledgerline/shared';
 import { ClientScopeGuard } from '../common/guards/client-scope.guard';
 import { CurrentClientId } from '../common/decorators/current-client-id.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { AuthenticatedUser } from '../common/types/authenticated-user';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { FindOrCreateAccountDto } from './dto/find-or-create-account.dto';
+import { SuggestAccountDto } from './dto/suggest-account.dto';
 
 @Controller('accounts')
 @UseGuards(ClientScopeGuard)
@@ -45,24 +47,28 @@ export class AccountsController {
     return this.accounts.create(clientId, dto);
   }
 
-  // Used by the journal entry form's free-text account field. Same admin-only restriction
-  // as create() — this still creates accounts, just via a name lookup instead of a code.
-  @Post('find-or-create')
-  @Roles('admin')
-  findOrCreate(@CurrentClientId() clientId: string, @Body() dto: FindOrCreateAccountDto) {
-    return this.accounts.findOrCreate(clientId, dto);
+  // No @Roles() — read-only, never creates or posts anything, so any client-scoped user
+  // typing a journal entry can get a suggestion, not just admins.
+  @Post('suggest')
+  suggest(@CurrentClientId() clientId: string, @Body() dto: SuggestAccountDto) {
+    return this.accounts.suggest(clientId, dto.description);
   }
 
   @Patch(':id')
   @Roles('admin')
-  update(@CurrentClientId() clientId: string, @Param('id') id: string, @Body() dto: UpdateAccountDto) {
-    return this.accounts.update(clientId, id, dto);
+  update(
+    @CurrentClientId() clientId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateAccountDto,
+  ) {
+    return this.accounts.update(clientId, user.id, id, dto);
   }
 
   @Delete(':id')
   @Roles('admin')
-  async delete(@CurrentClientId() clientId: string, @Param('id') id: string) {
-    await this.accounts.delete(clientId, id);
+  async delete(@CurrentClientId() clientId: string, @CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    await this.accounts.delete(clientId, user.id, id);
     return { deleted: true };
   }
 }

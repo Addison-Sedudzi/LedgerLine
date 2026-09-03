@@ -1,9 +1,11 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ClientScopeGuard } from '../common/guards/client-scope.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentClientId } from '../common/decorators/current-client-id.decorator';
 import { AuditService } from './audit.service';
 
 @Controller('audit')
+@UseGuards(ClientScopeGuard)
 @Roles('reviewer', 'admin')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}

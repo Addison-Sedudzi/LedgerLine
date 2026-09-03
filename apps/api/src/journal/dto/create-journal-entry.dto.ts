@@ -4,6 +4,7 @@ import {
   IsArray,
   IsDateString,
   IsIn,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -49,6 +50,7 @@ export class CreateJournalEntryDto {
   entryDate!: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'A narration is required' })
   @MaxLength(500)
   narration!: string;
 

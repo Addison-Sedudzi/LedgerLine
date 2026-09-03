@@ -5,20 +5,26 @@
    genuine alarm. */
 
 :root {
-  --ink: #16191c;
-  --ink-muted: #5a6169;
+  /* Tells the browser this page genuinely supports both themes, so native controls
+     (checkboxes, date pickers, a <select>'s own dropdown popup and scrollbar — the parts
+     background/color on the element itself can't fully reach) render in a matching light
+     or dark style instead of defaulting to light regardless of the page's own theme. */
+  color-scheme: light dark;
+
+  --ink: #1e2a38;
+  --ink-muted: #6b7280;
   --paper: #ffffff;
-  --greenbar: #e9f1e7;
-  --rule: #d5d9d2;
-  --accent: #1f4e5f;
-  --alarm: #8c2f1f;
+  --greenbar: #e7f6e4;
+  --rule: #e3e6e3;
+  --accent: #2ca01c;
+  --alarm: #c0362c;
   --flag: #b8860b;
 
   --font-display: 'Archivo', 'Arial Narrow', sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
 
-  --radius: 2px;
+  --radius: 8px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -91,9 +97,9 @@ button {
     --ink: #e8eaec;
     --ink-muted: #9aa2ab;
     --paper: #14171a;
-    --greenbar: #1b2420;
+    --greenbar: #16261a;
     --rule: #33383d;
-    --accent: #6fb3cc;
+    --accent: #4cc141;
     --alarm: #d97a68;
     --flag: #d9ac4f;
   }

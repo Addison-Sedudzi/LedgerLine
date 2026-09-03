@@ -35,6 +35,7 @@ export interface BalanceSheet {
   totalEquity: string;
   totalLiabilitiesAndEquity: string;
   balances: boolean;
+  difference: string;
   comparative?: { totalAssets: string; totalLiabilities: string; totalEquity: string };
 }
 

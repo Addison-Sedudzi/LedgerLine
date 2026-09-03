@@ -8,6 +8,7 @@ import { queryKeys } from '../api/queryKeys';
 import { LedgerTable } from '../components/LedgerTable';
 import { StatusPill } from '../components/StatusPill';
 import { EmptyState } from '../components/EmptyState';
+import { formatDate } from '../utils/format';
 
 const STATUS_TONE: Record<JournalEntryStatus, 'neutral' | 'accent' | 'alarm' | 'flag'> = {
   DRAFT: 'flag',
@@ -96,7 +97,7 @@ export function JournalListPage() {
         <LedgerTable
           columns={[
             { key: 'entryNo', header: 'No.', render: (r) => r.entry_no ?? '—' },
-            { key: 'date', header: 'Date', render: (r) => r.entry_date },
+            { key: 'date', header: 'Date', render: (r) => formatDate(r.entry_date) },
             { key: 'narration', header: 'Narration', render: (r) => r.narration },
             { key: 'source', header: 'Source', render: (r) => r.source },
             { key: 'status', header: 'Status', render: (r) => <StatusPill label={r.status} tone={STATUS_TONE[r.status]} /> },

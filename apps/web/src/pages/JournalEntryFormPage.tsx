@@ -1,11 +1,11 @@
-import { Fragment, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Money, sumMoney } from '@ledgerline/shared';
 import { useAuth } from '../context/AuthContext';
 import { useClientPeriod } from '../context/ClientPeriodContext';
 import { listAccounts } from '../api/accounts';
-import { createJournalEntry, postJournalEntry } from '../api/journal';
+import { createJournalEntry, getJournalEntry, postJournalEntry, updateJournalEntry } from '../api/journal';
 import { queryKeys } from '../api/queryKeys';
 import { AccountNameField } from '../components/AccountNameField';
 import { DateField } from '../components/DateField';
@@ -27,15 +27,47 @@ function emptyLine(): LineState {
 
 export function JournalEntryFormPage() {
   const navigate = useNavigate();
+  const { id: editId } = useParams<{ id?: string }>();
   const { clientId, periodId, isPeriodClosed } = useClientPeriod();
   const { me } = useAuth();
   const queryClient = useQueryClient();
+  const isEditing = !!editId;
 
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [narration, setNarration] = useState('');
   const [lines, setLines] = useState<LineState[]>([emptyLine(), emptyLine()]);
   const [error, setError] = useState<string | null>(null);
   const [lastPosted, setLastPosted] = useState<{ entryNo: number | null } | null>(null);
+  // The entry's own period, not necessarily whatever the header switcher currently shows —
+  // set once the draft loads, so editing a draft never silently moves it to a different
+  // period just because the user happened to be looking at a different one.
+  const [loadedPeriodId, setLoadedPeriodId] = useState<string | null>(null);
+
+  const { data: existingEntry, isLoading: isLoadingEntry } = useQuery({
+    queryKey: queryKeys.journalEntry(clientId ?? '', editId ?? ''),
+    queryFn: () => getJournalEntry(clientId!, editId!),
+    enabled: isEditing && !!clientId && !!editId,
+  });
+
+  // Loads the fetched draft into editable state exactly once — refetches in the background
+  // (e.g. after invalidateQueries) must never clobber what the user is actively typing.
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (!existingEntry || loadedRef.current) return;
+    loadedRef.current = true;
+    setEntryDate(existingEntry.entryDate.slice(0, 10));
+    setNarration(existingEntry.narration);
+    setLoadedPeriodId(existingEntry.periodId);
+    setLines(
+      existingEntry.lines.map((l) => ({
+        accountId: l.accountId,
+        accountName: l.accountName ?? '',
+        description: l.description ?? '',
+        debit: Money.of(l.debit).isZero() ? '' : l.debit,
+        credit: Money.of(l.credit).isZero() ? '' : l.credit,
+      })),
+    );
+  }, [existingEntry]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: queryKeys.accounts(clientId ?? ''),
@@ -44,7 +76,6 @@ export function JournalEntryFormPage() {
   });
 
   const canPost = me?.role === 'reviewer' || me?.role === 'admin';
-  const isAdmin = me?.role === 'admin';
 
   const totalDebit = sumMoney(lines.map((l) => l.debit || '0'));
   const totalCredit = sumMoney(lines.map((l) => l.credit || '0'));
@@ -70,7 +101,7 @@ export function JournalEntryFormPage() {
   );
   const usedLineCount = lines.filter((l) => l.accountId || l.accountName.trim() || l.debit || l.credit).length;
   const needsMoreLines = usedLineCount < 2;
-  const canSubmit = !needsMoreLines && lineIssues.every((issue) => issue === null) && difference.isZero();
+  const canSubmit = !needsMoreLines && lineIssues.every((issue) => issue === null) && difference.isZero() && narration.trim().length > 0;
 
   const [touchedLines, setTouchedLines] = useState<Set<number>>(new Set());
   const [attemptedSave, setAttemptedSave] = useState(false);
@@ -122,7 +153,7 @@ export function JournalEntryFormPage() {
   };
 
   const buildPayload = () => ({
-    periodId: periodId!,
+    periodId: loadedPeriodId ?? periodId!,
     entryDate,
     narration,
     lines: lines
@@ -136,9 +167,11 @@ export function JournalEntryFormPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => createJournalEntry(clientId!, buildPayload()),
+    mutationFn: () =>
+      isEditing ? updateJournalEntry(clientId!, editId!, buildPayload()) : createJournalEntry(clientId!, buildPayload()),
     onSuccess: (entry) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.journalEntries(clientId!, periodId!, {}) });
+      if (isEditing) queryClient.invalidateQueries({ queryKey: queryKeys.journalEntry(clientId!, editId!) });
       navigate(`/journal/${entry.id}`);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to save draft'),
@@ -146,12 +179,16 @@ export function JournalEntryFormPage() {
 
   const postMutation = useMutation({
     mutationFn: async () => {
-      const entry = await createJournalEntry(clientId!, buildPayload());
+      const entry = isEditing
+        ? await updateJournalEntry(clientId!, editId!, buildPayload())
+        : await createJournalEntry(clientId!, buildPayload());
       return postJournalEntry(clientId!, entry.id);
     },
     onSuccess: (entry) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.journalEntries(clientId!, periodId!, {}) });
-      setLastPosted({ entryNo: entry.entryNo });
+      if (isEditing) queryClient.invalidateQueries({ queryKey: queryKeys.journalEntry(clientId!, editId!) });
+      if (isEditing) navigate(`/journal/${entry.id}`);
+      else setLastPosted({ entryNo: entry.entryNo });
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to post entry'),
   });
@@ -200,6 +237,33 @@ export function JournalEntryFormPage() {
     );
   }
 
+  // Mirrors the backend's own restriction (JournalService.update only ever applies to a
+  // DRAFT) with a clear explanation up front, rather than letting the bookkeeper fill in
+  // changes and only then hit a rejected save. A posted entry is immutable by design — see
+  // CLAUDE.md — the correct fix is Reverse, from the entry's own detail page.
+  if (isEditing && existingEntry && existingEntry.status !== 'DRAFT') {
+    return (
+      <div style={{ maxWidth: 480 }}>
+        <h2>Can't edit this entry</h2>
+        <p style={{ color: 'var(--ink-muted)' }}>
+          Entry {existingEntry.entryNo ?? existingEntry.id} is {existingEntry.status.toLowerCase()}, not a draft.
+          Once posted, an entry is permanent — the way to correct it is to reverse it, then raise a new entry with
+          the correct figures.
+        </p>
+        <button
+          onClick={() => navigate(`/journal/${existingEntry.id}`)}
+          style={{ padding: '8px 16px', border: '1px solid var(--rule)', background: 'var(--paper)', borderRadius: 'var(--radius)' }}
+        >
+          Back to entry {existingEntry.entryNo ?? ''}
+        </button>
+      </div>
+    );
+  }
+
+  if (isEditing && isLoadingEntry) {
+    return <p>Loading…</p>;
+  }
+
   return (
     <div
       onKeyDown={(e) => {
@@ -212,7 +276,7 @@ export function JournalEntryFormPage() {
         }
       }}
     >
-      <h2>Raise a journal entry</h2>
+      <h2>{isEditing ? 'Edit draft entry' : 'Raise a journal entry'}</h2>
 
       {error && (
         <div style={{ marginBottom: 'var(--space-3)' }}>
@@ -223,12 +287,16 @@ export function JournalEntryFormPage() {
       <div style={{ display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
         <DateField label="Date" value={entryDate} onChange={setEntryDate} />
         <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--ink-muted)' }}>
-          Narration
+          Narration (required)
           <input
+            required
             value={narration}
             onChange={(e) => setNarration(e.target.value)}
             style={{ padding: '6px 8px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
           />
+          {attemptedSave && !narration.trim() && (
+            <span style={{ color: 'var(--alarm)' }}>A narration is required.</span>
+          )}
         </label>
       </div>
 
@@ -250,8 +318,8 @@ export function JournalEntryFormPage() {
                   <AccountNameField
                     accounts={accounts}
                     clientId={clientId!}
-                    canCreate={isAdmin}
                     accountName={line.accountName}
+                    description={line.description}
                     onTextChange={(name) => setLineAccountText(index, name)}
                     onSelect={(id, name) => setLineAccount(index, id, name)}
                   />
@@ -369,7 +437,7 @@ export function JournalEntryFormPage() {
               opacity: !canSubmit || isPeriodClosed ? 0.5 : 1,
             }}
           >
-            Save draft (Ctrl+S)
+            {isEditing ? 'Save changes' : 'Save draft'} (Ctrl+S)
           </button>
           {canPost && (
             <button

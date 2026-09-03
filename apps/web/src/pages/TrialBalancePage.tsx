@@ -9,6 +9,7 @@ import { Figure } from '../components/Figure';
 import { DateField } from '../components/DateField';
 import { ErrorState } from '../components/ErrorState';
 import { PrintButton, PrintFooter } from '../components/PrintFooter';
+import { formatMoney } from '../utils/format';
 
 export function TrialBalancePage() {
   const navigate = useNavigate();
@@ -93,7 +94,7 @@ export function TrialBalancePage() {
         </label>
         <button
           disabled={!canPrepareStatements}
-          title={data && !data.balanced ? `Trial balance does not agree (difference ${data.difference}) — cannot generate statements.` : undefined}
+          title={data && !data.balanced ? `Trial balance does not agree (difference ${formatMoney(data.difference)}) — cannot generate statements.` : undefined}
           onClick={() => navigate(`/financial-statements?from=${fromPeriodId}&to=${toPeriodId}`)}
           style={{
             padding: '8px 16px',
@@ -125,7 +126,7 @@ export function TrialBalancePage() {
       {data && !data.balanced && (
         <div style={{ marginBottom: 'var(--space-4)' }}>
           <ErrorState
-            message={`The trial balance does not agree. Difference: ${data.difference}.${
+            message={`The trial balance does not agree. Difference: ${formatMoney(data.difference)}.${
               data.diagnostics?.divisibleByNine
                 ? ' This difference is divisible by nine, which often indicates a transposition error (e.g. 54 posted as 45).'
                 : ''

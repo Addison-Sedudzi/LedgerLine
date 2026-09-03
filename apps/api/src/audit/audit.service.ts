@@ -5,6 +5,7 @@ import { DatabaseService } from '../database/database.service';
 export type AuditAction =
   | 'CREATE'
   | 'UPDATE'
+  | 'DELETE'
   | 'POST'
   | 'REVERSE'
   | 'APPROVE'

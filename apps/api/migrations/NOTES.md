@@ -31,3 +31,7 @@ against a fresh schema.
 - `012_account_subtype.sql` — adds a nullable subtype column (current/non-current asset or
   liability, cost of sales/operating expense) with a type-matching CHECK constraint, and
   backfills sensible defaults for every existing account.
+- `013_rename_ai_api_calls.sql` — renames claude_api_calls to ai_api_calls now that the AI
+  integration is OpenAI-based.
+- `014_account_suggestion_cache.sql` — caches the account-suggestion-while-typing feature's
+  results per client and description, so an unchanged description is never re-sent to the AI.

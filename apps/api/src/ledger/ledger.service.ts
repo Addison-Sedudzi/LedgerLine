@@ -21,19 +21,25 @@ function toLedgerLine(row: PeriodLedgerLineRow, amount: string): LedgerLine {
   };
 }
 
-// Same convention trialBalance() below uses: compute the net movement as if the account
-// sat on its own normal side, then read the actual side off the sign of that. An account
-// can genuinely finish a period on its abnormal side — a bank account overdrawn into
-// credit, say — and that is reported via isAbnormalBalance, never silently hidden or
-// flipped to look normal.
-function buildAccountLedger(account: AccountRow, lines: PeriodLedgerLineRow[]): AccountLedger {
+// Same convention trialBalance() below uses: read the account's cumulative balance (as of
+// the period's end date, sourced from LedgerRepository.accountBalancesAsOf — the same query
+// the trial balance is built from) as if the account sat on its own normal side, then read
+// the actual side off the sign of that. An account can genuinely finish a period on its
+// abnormal side — a bank account overdrawn into credit, say — and that is reported via
+// isAbnormalBalance, never silently hidden or flipped to look normal.
+//
+// totalDebit/totalCredit below are deliberately NOT part of that cumulative figure — they
+// describe only this period's own movement (for the T-account line display), whereas
+// `balance` is the account's true standing, which may include activity from earlier
+// periods. Conflating the two — reporting "this period's movement" as if it were "the
+// balance" — is what previously made the Ledger page disagree with the Trial Balance.
+function buildAccountLedger(account: AccountRow, lines: PeriodLedgerLineRow[], cumulativeBalance: string): AccountLedger {
   const debitRows = lines.filter((l) => Money.of(l.debit).isPositive());
   const creditRows = lines.filter((l) => Money.of(l.credit).isPositive());
   const totalDebit = sumMoney(debitRows.map((l) => l.debit));
   const totalCredit = sumMoney(creditRows.map((l) => l.credit));
 
-  const netOnNormalSide =
-    account.normal_balance === 'DEBIT' ? totalDebit.subtract(totalCredit) : totalCredit.subtract(totalDebit);
+  const netOnNormalSide = Money.of(cumulativeBalance);
   const onAbnormalSide = netOnNormalSide.isNegative();
   const balanceSide = onAbnormalSide ? (account.normal_balance === 'DEBIT' ? 'CREDIT' : 'DEBIT') : account.normal_balance;
   const balance = onAbnormalSide ? netOnNormalSide.negate() : netOnNormalSide;
@@ -61,16 +67,21 @@ export class LedgerService {
     private readonly periods: PeriodsRepository,
   ) {}
 
-  // Every postable, active account for the client, as a T-account of everything posted to
-  // it within the given period — including accounts with nothing posted this period, so the
-  // frontend's "show empty accounts" toggle needs no second request.
+  // Every postable account for the client, as a T-account of everything posted to it within
+  // the given period — including accounts with nothing posted this period, so the frontend's
+  // "show empty accounts" toggle needs no second request. Fetches accounts regardless of
+  // active status (unlike before) because a deactivated account can still carry a genuine
+  // historical balance that must appear here the same way it appears on the Trial Balance;
+  // a deactivated account is only left out when it truly has nothing to show — no balance
+  // and no movement this period.
   async ledgerForPeriod(clientId: string, periodId: string): Promise<LedgerResponse> {
     const period = await this.periods.findById(clientId, periodId);
     if (!period) throw new NotFoundError('Period', periodId);
 
-    const [accountRows, lineRows] = await Promise.all([
-      this.accounts.findAll(clientId, { active: true }),
+    const [accountRows, lineRows, balanceRows] = await Promise.all([
+      this.accounts.findAll(clientId, {}),
       this.ledger.ledgerLinesForPeriod(clientId, period.start_date, period.end_date),
+      this.ledger.accountBalancesAsOf(clientId, period.end_date, false),
     ]);
 
     const linesByAccount = new Map<string, PeriodLedgerLineRow[]>();
@@ -80,9 +91,12 @@ export class LedgerService {
       else linesByAccount.set(row.account_id, [row]);
     }
 
+    const balanceByAccount = new Map(balanceRows.map((r) => [r.account_id, r.balance]));
+
     const accounts = accountRows
       .filter((a) => a.is_postable)
-      .map((a) => buildAccountLedger(a, linesByAccount.get(a.id) ?? []))
+      .filter((a) => a.is_active || linesByAccount.has(a.id) || balanceByAccount.get(a.id) !== '0.00')
+      .map((a) => buildAccountLedger(a, linesByAccount.get(a.id) ?? [], balanceByAccount.get(a.id) ?? '0.00'))
       .sort((a, b) => {
         const typeDiff = TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type);
         return typeDiff !== 0 ? typeDiff : a.code.localeCompare(b.code);
@@ -114,8 +128,12 @@ export class LedgerService {
     const account = await this.accounts.findById(clientId, accountId);
     if (!account) throw new NotFoundError('Account', accountId);
 
-    const lines = await this.ledger.ledgerLinesForAccountInPeriod(clientId, accountId, period.start_date, period.end_date);
-    return buildAccountLedger(account, lines);
+    const [lines, balanceRows] = await Promise.all([
+      this.ledger.ledgerLinesForAccountInPeriod(clientId, accountId, period.start_date, period.end_date),
+      this.ledger.accountBalancesAsOf(clientId, period.end_date, false),
+    ]);
+    const balance = balanceRows.find((r) => r.account_id === accountId)?.balance ?? '0.00';
+    return buildAccountLedger(account, lines, balance);
   }
 
   async generalLedger(

@@ -2,7 +2,7 @@
 
 A double-entry accounting system for small bookkeeping practices in Ghana: source document
 to financial statements, with an audit trail, role separation, locked periods, and the
-Claude API assisting on document reading — never on arithmetic or posting.
+OpenAI API assisting on document reading — never on arithmetic or posting.
 
 ## Who this is for
 
@@ -23,7 +23,7 @@ scoped down to fit a one-week build. **Built:**
   when the trial balance doesn't agree.
 - Income statement and balance sheet, with comparatives. The balance sheet refuses to render
   itself if it does not balance.
-- Document intelligence: upload a photo of an invoice or receipt, Claude extracts the
+- Document intelligence: upload a photo of an invoice or receipt, the AI extracts the
   fields and suggests an expense account, a human edits and approves it into a **draft**
   journal entry. Nothing the model produces is ever posted automatically.
 - Role-based access (preparer / reviewer / admin), Supabase JWT auth, an append-only audit
@@ -36,7 +36,7 @@ reconciliation, fixed assets and depreciation, the guided period-close wizard an
 rollover, pre-close anomaly review and narrative commentary, deployment configuration.
 
 **Never in scope, by design:** payroll, statutory tax returns, inventory valuation, multiple
-currencies, natural language querying of the ledger. The Claude API extracts, classifies and
+currencies, natural language querying of the ledger. The OpenAI API extracts, classifies and
 drafts; it never computes a figure and never posts an entry. See `docs/ai-boundary.md`.
 
 ## Architecture
@@ -50,14 +50,14 @@ packages/shared TypeScript types and the Money class (decimal.js) used by both a
 ```
 
 PostgreSQL runs on Supabase. Supabase Auth issues the JWTs the API verifies. Supabase
-Storage holds uploaded documents. The Anthropic API is called only from `apps/api` — the key
+Storage holds uploaded documents. The OpenAI API is called only from `apps/api` — the key
 never reaches the browser bundle.
 
 ## Prerequisites
 
 - Node.js 20+
 - A Supabase project (free tier is enough)
-- An Anthropic API key, if you want document extraction to work (everything else runs
+- An OpenAI API key, if you want document extraction to work (everything else runs
   without one — see `docs/ai-boundary.md` for the degraded behaviour)
 
 ## Setup from a clean machine
@@ -96,7 +96,7 @@ never reaches the browser bundle.
    cp apps/web/.env.example apps/web/.env
    ```
 
-   Fill in `apps/api/.env` with the values from step 2, plus `ANTHROPIC_API_KEY` if you have
+   Fill in `apps/api/.env` with the values from step 2, plus `OPENAI_API_KEY` if you have
    one. Fill in `apps/web/.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from
    the same project.
 

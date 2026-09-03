@@ -1,40 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { AppConfigService } from '../config/config.service';
 import { DatabaseService } from '../database/database.service';
 
-// Checked against https://docs.claude.com/en/docs/about-claude/models/overview. 'fast' is
-// the cheapest/quickest model, used for extraction and classification (structured-output
-// tasks where the model is reading and categorising, not composing prose); 'strong' is
-// used only where the task is actually writing something — narrative commentary. Every
+// Checked against https://developers.openai.com/api/docs/models. 'fast' is the
+// cost-sensitive, high-volume model, used for extraction and classification (structured-
+// output tasks where the model is reading and categorising, not composing prose); 'strong'
+// is used only where the task is actually writing something — narrative commentary. Every
 // call defaults to 'fast'; a caller must explicitly ask for 'strong'.
 export const MODELS = {
-  fast: 'claude-haiku-4-5-20251001',
-  strong: 'claude-sonnet-5',
+  fast: 'gpt-5.6-luna',
+  strong: 'gpt-5.6-sol',
 } as const;
 export type ModelTier = keyof typeof MODELS;
 
-export interface ClaudeCallResult {
+export interface AiCallResult {
   text: string;
   inputTokens: number;
   outputTokens: number;
 }
 
-// The one wrapper every Claude API call in the codebase goes through. Nothing else touches
+// The one wrapper every OpenAI API call in the codebase goes through. Nothing else touches
 // the SDK directly. This is where the discipline in docs/ai-boundary.md is enforced in
 // code: this class only ever returns text or JSON for a human to read and decide on. It has
 // no method that writes to journal_entries or journal_lines, and it never will.
 @Injectable()
-export class ClaudeService {
-  private readonly logger = new Logger('ClaudeService');
-  private readonly client: Anthropic | null;
+export class AiService {
+  private readonly logger = new Logger('AiService');
+  private readonly client: OpenAI | null;
 
   constructor(
     private readonly config: AppConfigService,
     private readonly db: DatabaseService,
   ) {
-    const apiKey = this.config.anthropicApiKey;
-    this.client = apiKey ? new Anthropic({ apiKey }) : null;
+    const apiKey = this.config.openaiApiKey;
+    this.client = apiKey ? new OpenAI({ apiKey }) : null;
   }
 
   get isConfigured(): boolean {
@@ -64,13 +64,15 @@ export class ClaudeService {
     documentId: string | null,
   ): Promise<void> {
     await this.db.query(
-      `INSERT INTO claude_api_calls (client_id, purpose, model, input_tokens, output_tokens, document_id)
+      `INSERT INTO ai_api_calls (client_id, purpose, model, input_tokens, output_tokens, document_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [clientId, purpose, model, inputTokens, outputTokens, documentId],
     );
   }
 
-  private async callWithRetry(request: () => Promise<Anthropic.Message>): Promise<Anthropic.Message> {
+  private async callWithRetry(
+    request: () => Promise<OpenAI.Chat.Completions.ChatCompletion>,
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
     const delays = [1000, 3000];
     let lastError: unknown;
     for (let attempt = 0; attempt <= delays.length; attempt++) {
@@ -83,7 +85,7 @@ export class ClaudeService {
         // fail identically, so only rate limits and server errors are worth retrying.
         const retryable = status === 429 || (typeof status === 'number' && status >= 500);
         if (!retryable || attempt === delays.length) throw err;
-        this.logger.warn(`Claude API call failed with status ${status}, retrying...`);
+        this.logger.warn(`OpenAI API call failed with status ${status}, retrying...`);
         await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
       }
     }
@@ -96,28 +98,27 @@ export class ClaudeService {
     document?: { base64: string; mediaType: string };
     maxTokens?: number;
     tier?: ModelTier;
+    // A hard per-call budget. Document extraction (a background action) leaves this
+    // unset and takes the SDK's own default; a UI-latency-sensitive caller like the
+    // account-suggestion ghost text sets one explicitly so a slow response can never hang
+    // the input — it just fails fast and no suggestion is shown.
+    timeoutMs?: number;
     purpose: string;
     clientId?: string | null;
     documentId?: string | null;
-  }): Promise<ClaudeCallResult> {
+  }): Promise<AiCallResult> {
     if (!this.client) {
-      throw new Error(
-        'ANTHROPIC_API_KEY is not configured. Document intelligence features are unavailable until it is set.',
-      );
+      throw new Error('OPENAI_API_KEY is not configured. AI features are unavailable until it is set.');
     }
 
-    const content: Anthropic.MessageParam['content'] = [];
+    const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
     if (params.document) {
       // Images only (jpeg/png/webp) for this build — scanned photos of receipts and
-      // invoices, which is how this practice actually captures them. PDF support needs the
-      // SDK's beta documents API and was cut to keep the integration surface small.
+      // invoices, which is how this practice actually captures them. PDF support would
+      // need a separate extraction step and was cut to keep the integration surface small.
       content.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: params.document.mediaType as 'image/jpeg' | 'image/png' | 'image/webp',
-          data: params.document.base64,
-        },
+        type: 'image_url',
+        image_url: { url: `data:${params.document.mediaType};base64,${params.document.base64}` },
       });
     }
     if (params.userText) {
@@ -126,28 +127,27 @@ export class ClaudeService {
 
     const model = MODELS[params.tier ?? 'fast'];
     const response = await this.callWithRetry(() =>
-      this.client!.messages.create({
-        model,
-        max_tokens: params.maxTokens ?? 2048,
-        system: params.system,
-        messages: [{ role: 'user', content }],
-      }),
+      this.client!.chat.completions.create(
+        {
+          model,
+          max_completion_tokens: params.maxTokens ?? 2048,
+          messages: [
+            { role: 'system', content: params.system },
+            { role: 'user', content },
+          ],
+        },
+        params.timeoutMs ? { timeout: params.timeoutMs } : undefined,
+      ),
     );
 
-    await this.logUsage(
-      params.purpose,
-      model,
-      response.usage.input_tokens,
-      response.usage.output_tokens,
-      params.clientId ?? null,
-      params.documentId ?? null,
-    );
+    const inputTokens = response.usage?.prompt_tokens ?? 0;
+    const outputTokens = response.usage?.completion_tokens ?? 0;
+    await this.logUsage(params.purpose, model, inputTokens, outputTokens, params.clientId ?? null, params.documentId ?? null);
 
-    const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
     return {
-      text: textBlock?.text ?? '',
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      text: response.choices[0]?.message?.content ?? '',
+      inputTokens,
+      outputTokens,
     };
   }
 }

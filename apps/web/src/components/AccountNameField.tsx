@@ -1,15 +1,16 @@
-import { KeyboardEvent, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Account, AccountType } from '@ledgerline/shared';
-import { findOrCreateAccount } from '../api/accounts';
+import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Account } from '@ledgerline/shared';
+import { suggestAccount } from '../api/accounts';
 import { queryKeys } from '../api/queryKeys';
-import { ApiError } from '../api/apiClient';
 
 interface AccountNameFieldProps {
   accounts: Account[];
   clientId: string;
-  canCreate: boolean;
   accountName: string;
+  // The line's description, watched only to drive the debounced "ghost" account
+  // suggestion below — never displayed or edited here.
+  description: string;
   // Typing: the parent owns the text, this only reports keystrokes. Selecting a suggestion,
   // an exact blur match, or an inline creation sets id and name together in one call.
   onTextChange: (name: string) => void;
@@ -17,17 +18,15 @@ interface AccountNameFieldProps {
   onNext?: () => void;
 }
 
-// One button per account type; INCOME is labelled "Revenue" here only — the bookkeeper's
-// word for it — while the value sent to the API stays the shared AccountType enum.
-const TYPE_BUTTONS: { type: AccountType; label: string }[] = [
-  { type: 'ASSET', label: 'Asset' },
-  { type: 'LIABILITY', label: 'Liability' },
-  { type: 'EQUITY', label: 'Equity' },
-  { type: 'INCOME', label: 'Revenue' },
-  { type: 'EXPENSE', label: 'Expense' },
-];
+const SUGGESTION_DEBOUNCE_MS = 500;
 
-// Free-text, name-only account entry for the journal entry form: no codes shown anywhere.
+// Account-picking, name-typed entry for the journal entry form. Only an account that
+// already exists in the chart of accounts can ever be selected — there is no inline
+// creation path here (that used to exist; it let a mistyped or one-off name silently add a
+// new account to the chart from inside a journal entry, which is exactly the kind of
+// uncontrolled account sprawl the chart of accounts is supposed to prevent). A typed name
+// that matches nothing just stays unresolved: the line has no accountId, and the form's own
+// validation refuses to submit it.
 //
 // The input is a plain controlled input bound to `accountName` — never to local state, and
 // never re-derived from looking `accountId` up in `accounts`. That lookup-based approach is
@@ -36,22 +35,43 @@ const TYPE_BUTTONS: { type: AccountType; label: string }[] = [
 // directly to the line's stored name means there is no code path that can blank it — the
 // value shown is always, literally, what the line remembers.
 //
-// See AccountPicker.tsx for the code-and-name picker still used on the document review
-// page, which this intentionally does not replace.
+// See AccountPicker.tsx for the code-and-name picker still used on the document review page.
 export function AccountNameField({
   accounts,
   clientId,
-  canCreate,
   accountName,
+  description,
   onTextChange,
   onSelect,
   onNext,
 }: AccountNameFieldProps) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const [pendingName, setPendingName] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const queryClient = useQueryClient();
+  const [noMatch, setNoMatch] = useState(false);
+
+  // Debounced separately from React Query's own cache: the debounce controls when a
+  // request fires at all (never on every keystroke), and the query key (below) is what
+  // gives repeated identical descriptions their caching, backed by the server's own
+  // persistent cache keyed the same way.
+  const [debouncedDescription, setDebouncedDescription] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDescription(description.trim()), SUGGESTION_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [description]);
+
+  // Only worth asking once there's a real account left blank and a description with some
+  // substance — a one- or two-character fragment is too little to suggest from.
+  const suggestionEnabled = !accountName && debouncedDescription.length >= 3;
+  const { data: suggestionResult } = useQuery({
+    queryKey: queryKeys.accountSuggestion(clientId, debouncedDescription.toLowerCase()),
+    queryFn: () => suggestAccount(clientId, debouncedDescription),
+    enabled: suggestionEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+  const suggestion =
+    suggestionEnabled && suggestionResult?.accountId
+      ? { accountId: suggestionResult.accountId, accountName: suggestionResult.accountName! }
+      : null;
 
   const filtered = useMemo(() => {
     if (!accountName) return [];
@@ -62,52 +82,44 @@ export function AccountNameField({
   const commit = (account: Account) => {
     onSelect(account.id, account.name);
     setOpen(false);
-    setPendingName(null);
+    setNoMatch(false);
     onNext?.();
   };
-
-  const createMutation = useMutation({
-    mutationFn: (type: AccountType) => findOrCreateAccount(clientId, { name: pendingName!, type }),
-    onSuccess: (account) => {
-      // Written into the shared query cache immediately — every AccountNameField on the
-      // page reads the same cached `accounts` array (via the parent's one useQuery), so the
-      // new account is available to every other line the instant this resolves, with no
-      // page refresh and without waiting on the network round trip below.
-      queryClient.setQueryData<Account[]>(queryKeys.accounts(clientId), (old) => (old ? [...old, account] : [account]));
-      queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId) });
-      commit(account);
-    },
-    onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Failed to create account'),
-  });
 
   const handleChange = (name: string) => {
     onTextChange(name);
     setHighlighted(0);
     setOpen(true);
+    setNoMatch(false);
   };
 
   // Nothing was picked from the dropdown — decide whether the current text resolves to an
-  // existing account or needs the "new account" prompt. Delayed so a mousedown on a
-  // suggestion or a type button registers before this runs.
+  // existing account (an exact, case-insensitive name match) or just leave it unresolved.
+  // Delayed so a mousedown on a suggestion registers before this runs.
   const resolveOnBlur = () => {
     setTimeout(() => {
       setOpen(false);
       const typed = accountName.trim();
       if (!typed) {
-        setPendingName(null);
+        setNoMatch(false);
         return;
       }
       const exact = accounts.find((a) => a.name.toLowerCase() === typed.toLowerCase());
       if (exact) {
         commit(exact);
       } else {
-        setCreateError(null);
-        setPendingName(typed);
+        setNoMatch(true);
       }
     }, 150);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Accepting the ghost suggestion doesn't prevent default — Tab still moves focus to
+    // the next field afterward, same as it would have anyway.
+    if (e.key === 'Tab' && suggestion) {
+      onSelect(suggestion.accountId, suggestion.accountName);
+      return;
+    }
     if (e.key === 'Escape') {
       setOpen(false);
       return;
@@ -129,7 +141,7 @@ export function AccountNameField({
     <div style={{ position: 'relative' }}>
       <input
         value={accountName}
-        placeholder="Account name"
+        placeholder={suggestion ? `${suggestion.accountName} (Tab to accept)` : 'Account name'}
         onFocus={() => setOpen(true)}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -170,15 +182,18 @@ export function AccountNameField({
                 padding: '6px 8px',
                 background: i === highlighted ? 'var(--greenbar)' : 'transparent',
                 cursor: 'pointer',
+                display: 'flex',
+                gap: 8,
               }}
             >
-              {a.name}
+              <span className="mono" style={{ color: 'var(--ink-muted)' }}>{a.code}</span>
+              <span>{a.name}</span>
             </li>
           ))}
         </ul>
       )}
 
-      {pendingName && (
+      {noMatch && (
         <div
           style={{
             position: 'absolute',
@@ -190,40 +205,11 @@ export function AccountNameField({
             border: '1px solid var(--rule)',
             padding: 8,
             fontSize: 13,
+            color: 'var(--alarm)',
           }}
         >
-          {canCreate ? (
-            <>
-              <div style={{ marginBottom: 6 }}>New account &ldquo;{pendingName}&rdquo;. Type:</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {TYPE_BUTTONS.map((t) => (
-                  <button
-                    key={t.type}
-                    type="button"
-                    disabled={createMutation.isPending}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      createMutation.mutate(t.type);
-                    }}
-                    style={{
-                      padding: '4px 10px',
-                      border: '1px solid var(--rule)',
-                      background: 'var(--paper)',
-                      borderRadius: 'var(--radius)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              {createError && <div style={{ color: 'var(--alarm)', marginTop: 6 }}>{createError}</div>}
-            </>
-          ) : (
-            <div style={{ color: 'var(--ink-muted)' }}>
-              No account named &ldquo;{pendingName}&rdquo;. Ask an admin to create it.
-            </div>
-          )}
+          No account named &ldquo;{accountName.trim()}&rdquo; in the chart of accounts. Pick an existing account, or
+          ask an admin to add it under Chart of accounts.
         </div>
       )}
     </div>

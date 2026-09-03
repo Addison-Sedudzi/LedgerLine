@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { AccountLedger, AccountType, LedgerLine, Money } from '@ledgerline/shared';
 import { Figure } from './Figure';
+import { formatDate } from '../utils/format';
 
 const TYPE_LABEL: Record<AccountType, string> = {
   ASSET: 'Asset',
@@ -9,13 +10,6 @@ const TYPE_LABEL: Record<AccountType, string> = {
   INCOME: 'Revenue',
   EXPENSE: 'Expense',
 };
-
-// journal_entries.entry_date is a Postgres `date`, which the pg driver hands back as a
-// Date object and JSON serialises with a time and a Z — slicing to the first 10 characters
-// is always safe here and keeps the ledger showing a plain calendar date.
-function formatDate(iso: string): string {
-  return iso.slice(0, 10);
-}
 
 function Side({ lines }: { lines: LedgerLine[] }) {
   const navigate = useNavigate();

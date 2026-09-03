@@ -13,18 +13,18 @@ flowchart LR
         DB[(PostgreSQL)]
         Storage[Supabase Storage]
     end
-    Claude[Anthropic API]
+    AI[OpenAI API]
 
     Web -- JWT bearer token --> Api
     Web -- sign in / session --> Auth
     Api -- verifies JWT against --> Auth
     Api -- hand-written SQL, pg driver --> DB
     Api -- upload/download documents --> Storage
-    Api -- extraction + coding prompts --> Claude
+    Api -- extraction + coding prompts --> AI
 ```
 
-The API key for Claude and the Supabase service-role key exist only in `apps/api`'s process
-environment. Neither is ever sent to the browser bundle.
+The API key for the AI provider and the Supabase service-role key exist only in `apps/api`'s
+process environment. Neither is ever sent to the browser bundle.
 
 ## Flow 1 — posting a journal entry
 
@@ -47,8 +47,8 @@ environment. Neither is ever sent to the browser bundle.
 
 ```mermaid
 flowchart LR
-    Upload[Upload photo] --> Extract[Claude extracts fields]
-    Extract --> Suggest[Claude suggests an expense account]
+    Upload[Upload photo] --> Extract[AI extracts fields]
+    Extract --> Suggest[AI suggests an expense account]
     Suggest --> Review["Human reviews /\nedits every field"]
     Review --> Approve["Human clicks\nApprove and create draft entry"]
     Approve --> Draft[DRAFT journal entry]
@@ -60,6 +60,6 @@ flowchart LR
 ```
 
 The three highlighted steps are the only ones a human performs, and they are also the only
-three steps with any authority to change the ledger. Claude's output (the two steps before
+three steps with any authority to change the ledger. The AI's output (the two steps before
 "Review") is advisory at every point — see `docs/ai-boundary.md` for how that is enforced in
 code, not just in this diagram.

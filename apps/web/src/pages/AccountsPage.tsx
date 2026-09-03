@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Account, AccountSubtype, AccountType } from '@ledgerline/shared';
 import { useAuth } from '../context/AuthContext';
 import { useClientPeriod } from '../context/ClientPeriodContext';
-import { createAccount, listAccounts, updateAccount } from '../api/accounts';
+import { createAccount, deleteAccount, listAccounts, updateAccount } from '../api/accounts';
 import { queryKeys } from '../api/queryKeys';
 import { LedgerTable } from '../components/LedgerTable';
 import { EmptyState } from '../components/EmptyState';
@@ -113,6 +113,8 @@ export function AccountsPage() {
   const [search, setSearch] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [changingType, setChangingType] = useState<{ id: string; type: AccountType } | null>(null);
+  const [updateError, setUpdateError] = useState<{ id: string; message: string } | null>(null);
 
   const isAdmin = me?.role === 'admin';
 
@@ -123,12 +125,26 @@ export function AccountsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (input: { id: string; patch: { name?: string; isActive?: boolean; subtype?: AccountSubtype } }) =>
+    mutationFn: (input: { id: string; patch: { name?: string; isActive?: boolean; subtype?: AccountSubtype; type?: AccountType } }) =>
       updateAccount(clientId!, input.id, input.patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId!) });
       setRenaming(null);
+      setChangingType(null);
+      setUpdateError(null);
     },
+    onError: (err, variables) =>
+      setUpdateError({ id: variables.id, message: err instanceof ApiError ? err.message : 'Failed to update account' }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteAccount(clientId!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts(clientId!) });
+      setUpdateError(null);
+    },
+    onError: (err, id) =>
+      setUpdateError({ id, message: err instanceof ApiError ? err.message : 'Failed to delete account' }),
   });
 
   const filtered = useMemo(() => {
@@ -247,23 +263,95 @@ export function AccountsPage() {
                 {
                   key: 'actions',
                   header: '',
-                  render: (a) =>
-                    isAdmin ? (
-                      <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          onClick={() => setRenaming({ id: a.id, name: a.name })}
-                          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 12 }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          onClick={() => updateMutation.mutate({ id: a.id, patch: { isActive: !a.isActive } })}
-                          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 12 }}
-                        >
-                          {a.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
+                  render: (a) => {
+                    if (!isAdmin) return null;
+
+                    if (changingType?.id === a.id) {
+                      return (
+                        <div>
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              updateMutation.mutate({ id: a.id, patch: { type: changingType.type } });
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ display: 'flex', gap: 4, alignItems: 'center' }}
+                          >
+                            <select
+                              autoFocus
+                              value={changingType.type}
+                              onChange={(e) => setChangingType({ id: a.id, type: e.target.value as AccountType })}
+                              style={{ padding: '2px 6px', border: '1px solid var(--rule)', borderRadius: 'var(--radius)' }}
+                            >
+                              {TYPE_ORDER.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </select>
+                            <button type="submit" disabled={updateMutation.isPending} style={{ padding: '2px 8px' }}>
+                              Save
+                            </button>
+                            <button type="button" onClick={() => setChangingType(null)} style={{ padding: '2px 8px' }}>
+                              Cancel
+                            </button>
+                          </form>
+                          {updateError?.id === a.id && (
+                            <div style={{ color: 'var(--alarm)', fontSize: 11, marginTop: 4, maxWidth: 220 }}>
+                              {updateError.message}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => setRenaming({ id: a.id, name: a.name })}
+                            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            onClick={() => {
+                              setUpdateError(null);
+                              setChangingType({ id: a.id, type: a.type });
+                            }}
+                            title="Only possible while this account has no postings against it"
+                            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                          >
+                            Change type
+                          </button>
+                          <button
+                            onClick={() => updateMutation.mutate({ id: a.id, patch: { isActive: !a.isActive } })}
+                            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                          >
+                            {a.isActive ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setUpdateError(null);
+                              if (confirm(`Delete "${a.name}"? This only works while the account has no postings and no sub-accounts.`)) {
+                                deleteMutation.mutate(a.id);
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            title="Only possible while this account has no postings and no sub-accounts"
+                            style={{ background: 'none', border: 'none', color: 'var(--alarm)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        {updateError?.id === a.id && (
+                          <div style={{ color: 'var(--alarm)', fontSize: 11, marginTop: 4, maxWidth: 220 }}>
+                            {updateError.message}
+                          </div>
+                        )}
                       </div>
-                    ) : null,
+                    );
+                  },
                 },
               ]}
               rows={group}

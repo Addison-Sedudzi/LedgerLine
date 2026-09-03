@@ -9,9 +9,13 @@ interface FigureProps {
   zeroDisplay?: string;
 }
 
-// Renders a decimal-string amount the way a ledger does: thousand separators, two decimal
-// places, a negative shown in parentheses rather than with a minus sign, and zero as a dash
-// rather than "0.00" so a page of figures doesn't drown in zeroes.
+// The Ghanaian cedi symbol, used throughout — LedgerLine has one currency (see CLAUDE.md's
+// "what NOT to build": no multi-currency), so this is a constant, not a setting.
+const CURRENCY = 'GH₵';
+
+// Renders a decimal-string amount the way a ledger does: a currency symbol, thousand
+// separators, two decimal places, a negative shown in parentheses rather than with a minus
+// sign, and zero as a dash rather than "0.00" so a page of figures doesn't drown in zeroes.
 export function Figure({ value, className, zeroDisplay = '—' }: FigureProps) {
   const money = Money.of(value);
 
@@ -22,10 +26,15 @@ export function Figure({ value, className, zeroDisplay = '—' }: FigureProps) {
   if (money.isNegative()) {
     return (
       <span className={`figure ${className ?? ''}`} style={{ color: 'var(--alarm)' }}>
-        ({money.negate().format()})
+        ({CURRENCY}{money.negate().format()})
       </span>
     );
   }
 
-  return <span className={`figure ${className ?? ''}`}>{money.format()}</span>;
+  return (
+    <span className={`figure ${className ?? ''}`}>
+      {CURRENCY}
+      {money.format()}
+    </span>
+  );
 }

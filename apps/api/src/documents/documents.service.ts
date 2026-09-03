@@ -7,7 +7,7 @@ import { AccountsRepository } from '../accounts/accounts.repository';
 import { PeriodsRepository } from '../periods/periods.repository';
 import { JournalService } from '../journal/journal.service';
 import { AuditService } from '../audit/audit.service';
-import { ClaudeService } from '../intelligence/claude.service';
+import { AiService } from '../intelligence/ai.service';
 import { DocumentsRepository, DocumentRow } from './documents.repository';
 import { StorageService } from './storage.service';
 import { ApproveDocumentDto } from './dto/approve-document.dto';
@@ -61,7 +61,7 @@ export class DocumentsService {
   constructor(
     private readonly documents: DocumentsRepository,
     private readonly storage: StorageService,
-    private readonly claude: ClaudeService,
+    private readonly ai: AiService,
     private readonly accounts: AccountsRepository,
     private readonly periods: PeriodsRepository,
     private readonly journal: JournalService,
@@ -118,9 +118,9 @@ export class DocumentsService {
       return this.documents.markExtracted(id, cached.extracted, cached.extraction_raw ?? '');
     }
 
-    if (!this.claude.isConfigured) {
+    if (!this.ai.isConfigured) {
       throw new ValidationError(
-        'ANTHROPIC_API_KEY is not configured on this server. Document extraction is unavailable.',
+        'OPENAI_API_KEY is not configured on this server. Document extraction is unavailable.',
       );
     }
 
@@ -130,7 +130,7 @@ export class DocumentsService {
     let extracted: ExtractedDocument | null = null;
     let rawText = '';
     try {
-      const result = await this.claude.messages({
+      const result = await this.ai.messages({
         system: EXTRACTION_SYSTEM_PROMPT,
         document: { base64, mediaType: doc.mime_type },
         tier: 'fast',
@@ -163,7 +163,7 @@ export class DocumentsService {
     doc: DocumentRow,
     extracted: ExtractedDocument,
   ): Promise<void> {
-    if (!this.claude.isConfigured) return;
+    if (!this.ai.isConfigured) return;
 
     const expenseAccounts = await this.accounts.findAll(clientId, { type: 'EXPENSE', active: true });
     const recent = extracted.supplier
@@ -185,7 +185,7 @@ Pick accountId from the provided list of account ids only, or null if none fit.`
     });
 
     try {
-      const result = await this.claude.messages({
+      const result = await this.ai.messages({
         system,
         userText,
         tier: 'fast',

@@ -33,7 +33,7 @@ inbox and review).
   actual closing-entries posting (debit every income account, credit every expense account,
   net to retained earnings). This is genuinely accounting-sensitive and deserves the time the
   original spec gives it — not something to rush. 2 days.
-- **Pre-close review and narrative commentary (15).** A second Claude integration, read-only
+- **Pre-close review and narrative commentary (15).** A second AI integration, read-only
   by construction (same discipline as document intelligence — see `docs/ai-boundary.md`).
   Needs the deterministic-summary SQL queries plus two more prompts. 1–2 days.
 - **Deployment (24), full documentation set (25).** This build runs locally only; Dockerfiles,

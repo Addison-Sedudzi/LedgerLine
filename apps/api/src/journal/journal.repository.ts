@@ -29,6 +29,8 @@ export interface JournalLineRow {
   description: string | null;
   account_code?: string;
   account_name?: string;
+  account_is_active?: boolean;
+  account_is_postable?: boolean;
 }
 
 export interface JournalLineInput {
@@ -90,7 +92,8 @@ export class JournalRepository {
   async findLines(entryId: string, client?: PoolClient): Promise<JournalLineRow[]> {
     const runner = client ?? this.db.pool;
     const result = await runner.query<JournalLineRow>(
-      `SELECT jl.*, a.code AS account_code, a.name AS account_name
+      `SELECT jl.*, a.code AS account_code, a.name AS account_name,
+              a.is_active AS account_is_active, a.is_postable AS account_is_postable
        FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
        WHERE jl.entry_id = $1 ORDER BY jl.line_no`,
       [entryId],

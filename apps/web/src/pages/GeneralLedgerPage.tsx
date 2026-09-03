@@ -7,6 +7,7 @@ import { queryKeys } from '../api/queryKeys';
 import { LedgerTable } from '../components/LedgerTable';
 import { Figure } from '../components/Figure';
 import { DateField } from '../components/DateField';
+import { formatDate } from '../utils/format';
 
 export function GeneralLedgerPage() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -33,7 +34,7 @@ export function GeneralLedgerPage() {
       {data && (
         <LedgerTable
           columns={[
-            { key: 'date', header: 'Date', render: (l) => l.entry_date },
+            { key: 'date', header: 'Date', render: (l) => formatDate(l.entry_date) },
             { key: 'entryNo', header: 'No.', render: (l) => l.entry_no ?? '—' },
             { key: 'narration', header: 'Narration', render: (l) => l.narration },
             { key: 'contra', header: 'Contra account', render: (l) => l.contra_account ?? '' },

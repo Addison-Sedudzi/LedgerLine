@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PoolClient } from 'pg';
-import { AccountSubtype, AccountType, NormalBalance } from '@ledgerline/shared';
+import { AccountSubtype, AccountType, Confidence, NormalBalance } from '@ledgerline/shared';
 import { DatabaseService } from '../database/database.service';
 
 export interface AccountRow {
@@ -15,6 +15,11 @@ export interface AccountRow {
   is_active: boolean;
   description: string | null;
   subtype: AccountSubtype | null;
+}
+
+export interface SuggestionCacheRow {
+  account_id: string | null;
+  confidence: Confidence | null;
 }
 
 @Injectable()
@@ -75,8 +80,9 @@ export class AccountsRepository {
     ]);
   }
 
-  async deleteById(clientId: string, id: string): Promise<void> {
-    await this.db.query('DELETE FROM accounts WHERE client_id = $1 AND id = $2', [clientId, id]);
+  async deleteById(clientId: string, id: string, client?: PoolClient): Promise<void> {
+    const runner = client ?? this.db.pool;
+    await runner.query('DELETE FROM accounts WHERE client_id = $1 AND id = $2', [clientId, id]);
   }
 
   async hasChildren(clientId: string, id: string): Promise<boolean> {
@@ -131,7 +137,17 @@ export class AccountsRepository {
   async update(
     clientId: string,
     id: string,
-    patch: Partial<{ name: string; isActive: boolean; subtype: AccountSubtype }>,
+    patch: Partial<{
+      name: string;
+      isActive: boolean;
+      // null (as opposed to undefined) explicitly clears it — used when a type change
+      // moves an account to INCOME/EQUITY, which have no subtype in this build.
+      subtype: AccountSubtype | null;
+      type: AccountType;
+      normalBalance: NormalBalance;
+      code: string;
+    }>,
+    client?: PoolClient,
   ): Promise<AccountRow> {
     const sets: string[] = [];
     const params: unknown[] = [];
@@ -147,17 +163,31 @@ export class AccountsRepository {
       params.push(patch.subtype);
       sets.push(`subtype = $${params.length}`);
     }
+    if (patch.type !== undefined) {
+      params.push(patch.type);
+      sets.push(`type = $${params.length}`);
+    }
+    if (patch.normalBalance !== undefined) {
+      params.push(patch.normalBalance);
+      sets.push(`normal_balance = $${params.length}`);
+    }
+    if (patch.code !== undefined) {
+      params.push(patch.code);
+      sets.push(`code = $${params.length}`);
+    }
     params.push(clientId, id);
-    const rows = await this.db.query<AccountRow>(
+    const runner = client ?? this.db.pool;
+    const rows = await runner.query<AccountRow>(
       `UPDATE accounts SET ${sets.join(', ')}
        WHERE client_id = $${params.length - 1} AND id = $${params.length} RETURNING *`,
       params,
     );
-    return rows[0];
+    return rows.rows[0];
   }
 
-  // Balance as at a date, from posted lines only. Draft entries never affect a balance:
-  // an unposted figure is a proposal, not a fact, and must never leak into a report.
+  // Balance as at a date, from posted (and reversed — see LedgerRepository.postedStatusFilter
+  // for why) lines only. Draft entries never affect a balance: an unposted figure is a
+  // proposal, not a fact, and must never leak into a report.
   async balanceAsAt(
     clientId: string,
     accountId: string,
@@ -171,9 +201,34 @@ export class AccountsRepository {
       `SELECT COALESCE(${sign}, 0)::text AS balance
        FROM journal_lines jl
        JOIN journal_entries je ON je.id = jl.entry_id
-       WHERE je.client_id = $1 AND jl.account_id = $2 AND je.status = 'POSTED' AND je.entry_date <= $3`,
+       WHERE je.client_id = $1 AND jl.account_id = $2 AND je.status IN ('POSTED','REVERSED') AND je.entry_date <= $3`,
       [clientId, accountId, asAt],
     );
     return result.rows[0]?.balance ?? '0.00';
+  }
+
+  async findCachedSuggestion(clientId: string, descriptionKey: string): Promise<SuggestionCacheRow | null> {
+    const rows = await this.db.query<SuggestionCacheRow>(
+      'SELECT account_id, confidence FROM account_suggestion_cache WHERE client_id = $1 AND description_key = $2',
+      [clientId, descriptionKey],
+    );
+    return rows[0] ?? null;
+  }
+
+  // Upsert: re-suggesting for a description already cached (e.g. after the chart of
+  // accounts changed) overwrites rather than duplicates.
+  async cacheSuggestion(
+    clientId: string,
+    descriptionKey: string,
+    accountId: string | null,
+    confidence: Confidence | null,
+  ): Promise<void> {
+    await this.db.query(
+      `INSERT INTO account_suggestion_cache (client_id, description_key, account_id, confidence)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (client_id, description_key)
+       DO UPDATE SET account_id = $3, confidence = $4, created_at = now()`,
+      [clientId, descriptionKey, accountId, confidence],
+    );
   }
 }

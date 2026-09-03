@@ -18,14 +18,14 @@ amount, Tab past credit, Enter to add the next line, repeat for the credit side.
 difference figure at the bottom going to zero as the entry balances. Ctrl+Enter to post
 (confirm the dialog). Show the assigned entry number.
 
-## 3. Upload a document and watch Claude read it (90 seconds)
+## 3. Upload a document and watch the AI read it (90 seconds)
 
 Go to **Record → Document inbox**. Upload a photo of a receipt (a real one, or a printed
 sample). It extracts automatically. Open it: point out the confidence label per field, the
 suggested expense account with its one-line reason, and the journal entry preview building
 live underneath as you'd edit fields. Say: "Nothing here has touched the ledger yet — this is
-still just Claude's reading of the document." Click **Approve and create draft entry**, then
-show the quiet line at the foot: "Extracted by Claude, reviewed by you."
+still just the model's reading of the document." Click **Approve and create draft entry**, then
+show the quiet line at the foot: "Extracted by AI, reviewed by you."
 
 ## 4. Post that draft, then reverse a mistake (45 seconds)
 

@@ -8,7 +8,7 @@ and produces financial statements. The system must be correct before it is conve
 
 **Current build status:** a scoped-down vertical slice (see `docs/cut-scope.md`). The core
 ledger — accounts, posting engine, general ledger, trial balance, income statement, balance
-sheet — and one Claude integration (document extraction and coding, human-approved) are
+sheet — and one AI integration (document extraction and coding, human-approved) are
 built. Receivables/payables, cash/bank reconciliation, fixed assets, the period-close wizard,
 and pre-close review/narrative commentary are not yet built.
 
@@ -21,8 +21,8 @@ and pre-close review/narrative commentary are not yet built.
   such as Prisma or TypeORM. SQL is written explicitly so that the accounting logic is
   readable and reviewable.
 - Supabase Auth for login. Supabase Storage for uploaded documents.
-- Claude API for document extraction and account coding. All calls are made from the API
-  server (`ClaudeService`, `apps/api/src/intelligence/claude.service.ts`). The API key never
+- OpenAI API for document extraction and account coding. All calls are made from the API
+  server (`AiService`, `apps/api/src/intelligence/ai.service.ts`). The API key never
   reaches the browser.
 
 ## Accounting rules that must never be broken
@@ -50,7 +50,7 @@ and pre-close review/narrative commentary are not yet built.
 8. Every create, post, reverse, approve and reject action writes a row to the audit log
    (`AuditService`), naming the user, the time, and the before and after state. The audit log
    itself is append-only, enforced by a trigger.
-9. The Claude API never calculates a figure and never posts an entry. It extracts,
+9. The OpenAI API never calculates a figure and never posts an entry. It extracts,
    classifies and drafts. All arithmetic is done in SQL or TypeScript. Everything the model
    produces enters a review queue (the documents module) and is committed only by a named
    human user, as a DRAFT — never posted automatically. See `docs/ai-boundary.md`.

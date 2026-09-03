@@ -246,9 +246,20 @@ export class JournalService {
       if (!period) throw new NotFoundError('Period', entry.period_id);
       if (period.status !== 'OPEN') throw new PeriodClosedError(period.name);
 
-      // Never trust that debits equal credits because it was checked at draft creation —
-      // the accounts or the period may have changed since. Re-verify against the database.
+      // Never trust that debits equal credits, or that every line's account is still valid
+      // to post to, because that was checked at draft creation — the accounts or the period
+      // may have changed since (an account can be deactivated, or gain a sub-account and
+      // lose postability, while a draft referencing it sits unposted). Re-verify both
+      // against the database, not the draft's own stale assumption.
       const lines = await this.journal.findLines(id, client);
+      for (const line of lines) {
+        if (!line.account_is_active) {
+          throw new ValidationError(`Account ${line.account_code} — ${line.account_name} is not active and cannot be posted to`);
+        }
+        if (!line.account_is_postable) {
+          throw new ValidationError(`Account ${line.account_code} — ${line.account_name} is not postable — it has sub-accounts`);
+        }
+      }
       const totalDebit = lines.reduce((t, l) => t.add(l.debit), Money.zero());
       const totalCredit = lines.reduce((t, l) => t.add(l.credit), Money.zero());
       if (!totalDebit.equals(totalCredit)) {

@@ -1,4 +1,5 @@
 import { useClientPeriod } from '../context/ClientPeriodContext';
+import { formatDate } from '../utils/format';
 
 // Rendered only when printing (see styles/print.css) — a footer identifying the client,
 // the period, and the print date, so a printed page can never be mistaken for an
@@ -9,7 +10,7 @@ export function PrintFooter() {
 
   return (
     <div className="print-footer">
-      {clientName} — {period?.name ?? ''} — printed {new Date().toLocaleDateString()}
+      {clientName} — {period?.name ?? ''} — printed {formatDate(new Date().toISOString())}
     </div>
   );
 }

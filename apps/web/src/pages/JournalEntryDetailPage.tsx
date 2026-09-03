@@ -8,6 +8,7 @@ import { LedgerTable } from '../components/LedgerTable';
 import { Figure } from '../components/Figure';
 import { StatusPill } from '../components/StatusPill';
 import { ApiError } from '../api/apiClient';
+import { formatDate } from '../utils/format';
 
 export function JournalEntryDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -47,7 +48,7 @@ export function JournalEntryDetailPage() {
             Entry {entry.entryNo ?? '(draft)'} <StatusPill label={entry.status} />
           </h2>
           <div style={{ color: 'var(--ink-muted)' }}>
-            {entry.entryDate} — {entry.narration}
+            {formatDate(entry.entryDate)} — {entry.narration}
           </div>
           {entry.reversesEntryId && (
             <div style={{ fontSize: 12 }}>
@@ -57,6 +58,14 @@ export function JournalEntryDetailPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          {entry.status === 'DRAFT' && (
+            <button
+              onClick={() => navigate(`/journal/${id}/edit`)}
+              style={{ padding: '8px 16px', border: '1px solid var(--rule)', background: 'var(--paper)', borderRadius: 'var(--radius)' }}
+            >
+              Edit
+            </button>
+          )}
           {entry.status === 'DRAFT' && canReview && (
             <button
               onClick={() => postMutation.mutate()}
@@ -81,6 +90,13 @@ export function JournalEntryDetailPage() {
           )}
         </div>
       </div>
+
+      {entry.status === 'POSTED' && (
+        <p style={{ fontSize: 12, color: 'var(--ink-muted)', marginTop: -8, marginBottom: 'var(--space-4)' }}>
+          Posted entries are permanent and can't be edited. Made a mistake? Reverse this entry, then raise a new
+          one with the correct figures.
+        </p>
+      )}
 
       {postMutation.isError && (
         <p style={{ color: 'var(--alarm)' }}>
