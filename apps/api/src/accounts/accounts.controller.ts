@@ -43,8 +43,8 @@ export class AccountsController {
 
   @Post()
   @Roles('admin')
-  create(@CurrentClientId() clientId: string, @Body() dto: CreateAccountDto) {
-    return this.accounts.create(clientId, dto);
+  create(@CurrentClientId() clientId: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAccountDto) {
+    return this.accounts.create(clientId, user.id, dto);
   }
 
   // No @Roles() — read-only, never creates or posts anything, so any client-scoped user

@@ -18,7 +18,7 @@ function StatementRows({ lines }: { lines: StatementLine[] }) {
             <Link to={`/ledger/${line.accountId}`}>{line.name}</Link>
           </td>
           <td style={{ padding: '4px 8px', textAlign: 'right' }} className="figure">
-            <Figure value={line.amount} />
+            <Figure value={line.amount} showZero />
           </td>
         </tr>
       ))}
@@ -78,7 +78,7 @@ export function StatementsPage() {
               <tr style={{ borderTop: '1px solid var(--ink)' }}>
                 <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total income</td>
                 <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                  <Figure value={incomeQuery.data.totalIncome} />
+                  <Figure value={incomeQuery.data.totalIncome} showZero />
                 </td>
               </tr>
             </tbody>
@@ -91,7 +91,7 @@ export function StatementsPage() {
               <tr style={{ borderTop: '1px solid var(--ink)' }}>
                 <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total expenses</td>
                 <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                  <Figure value={incomeQuery.data.totalExpenses} />
+                  <Figure value={incomeQuery.data.totalExpenses} showZero />
                 </td>
               </tr>
             </tbody>
@@ -102,7 +102,7 @@ export function StatementsPage() {
               <tr style={{ borderTop: '1px solid var(--ink)', borderBottom: '3px double var(--ink)' }}>
                 <td style={{ padding: '6px 8px', fontWeight: 700 }}>Profit for the period</td>
                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                  <Figure value={incomeQuery.data.profitForPeriod} />
+                  <Figure value={incomeQuery.data.profitForPeriod} showZero />
                 </td>
               </tr>
             </tbody>
@@ -133,7 +133,7 @@ export function StatementsPage() {
               <tr style={{ borderTop: '1px solid var(--ink)' }}>
                 <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total assets</td>
                 <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                  <Figure value={balanceQuery.data.totalAssets} />
+                  <Figure value={balanceQuery.data.totalAssets} showZero />
                 </td>
               </tr>
             </tbody>
@@ -146,7 +146,7 @@ export function StatementsPage() {
               <tr style={{ borderTop: '1px solid var(--ink)' }}>
                 <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total liabilities</td>
                 <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                  <Figure value={balanceQuery.data.totalLiabilities} />
+                  <Figure value={balanceQuery.data.totalLiabilities} showZero />
                 </td>
               </tr>
             </tbody>
@@ -159,7 +159,7 @@ export function StatementsPage() {
               <tr style={{ borderTop: '1px solid var(--ink)', borderBottom: '3px double var(--ink)' }}>
                 <td style={{ padding: '6px 8px', fontWeight: 700 }}>Total liabilities and equity</td>
                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                  <Figure value={balanceQuery.data.totalLiabilitiesAndEquity} />
+                  <Figure value={balanceQuery.data.totalLiabilitiesAndEquity} showZero />
                 </td>
               </tr>
             </tbody>

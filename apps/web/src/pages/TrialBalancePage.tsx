@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useClientPeriod } from '../context/ClientPeriodContext';
@@ -8,19 +8,34 @@ import { LedgerTable } from '../components/LedgerTable';
 import { Figure } from '../components/Figure';
 import { DateField } from '../components/DateField';
 import { ErrorState } from '../components/ErrorState';
+import { LoadingState } from '../components/LoadingState';
 import { PrintButton, PrintFooter } from '../components/PrintFooter';
 import { formatMoney } from '../utils/format';
 
 export function TrialBalancePage() {
   const navigate = useNavigate();
   const { clientId, period, periodId, periods } = useClientPeriod();
-  const [asAt, setAsAt] = useState(period?.end_date ?? new Date().toISOString().slice(0, 10));
+  // Left empty rather than defaulted from period/periods right here: a useState initial
+  // value is only ever taken from the very first render, and period/periods can still be
+  // loading at that instant on a fresh navigation — defaulting to today then bakes "today"
+  // into state permanently, even once the real period data arrives moments later. The
+  // effect below fills these in once, the moment the data actually shows up, instead.
+  const [asAt, setAsAt] = useState('');
   const [includeDrafts, setIncludeDrafts] = useState(false);
+  const [fromPeriodId, setFromPeriodId] = useState('');
+  const [toPeriodId, setToPeriodId] = useState('');
+  const [rangeInitialized, setRangeInitialized] = useState(false);
 
-  // Default From = earliest open period, To = whatever's currently selected in the header.
-  // periods is already chronological (PeriodsRepository.findAll orders by start_date).
-  const [fromPeriodId, setFromPeriodId] = useState(() => periods.find((p) => p.status === 'OPEN')?.id ?? periods[0]?.id ?? '');
-  const [toPeriodId, setToPeriodId] = useState(() => periodId ?? periods[periods.length - 1]?.id ?? '');
+  useEffect(() => {
+    if (rangeInitialized || periods.length === 0) return;
+    // Default From = earliest open period, To = whatever's currently selected in the
+    // header. periods is already chronological (PeriodsRepository.findAll orders by
+    // start_date).
+    setFromPeriodId(periods.find((p) => p.status === 'OPEN')?.id ?? periods[0]?.id ?? '');
+    setToPeriodId(periodId ?? periods[periods.length - 1]?.id ?? '');
+    setAsAt((period ?? periods[periods.length - 1]).end_date.slice(0, 10));
+    setRangeInitialized(true);
+  }, [periods, periodId, period, rangeInitialized]);
 
   const fromPeriod = periods.find((p) => p.id === fromPeriodId);
   const toPeriod = periods.find((p) => p.id === toPeriodId);
@@ -36,7 +51,7 @@ export function TrialBalancePage() {
     // If the current "To" would now be before the new "From", snap it forward.
     if (newFrom && toPeriod && toPeriod.start_date < newFrom.start_date) {
       setToPeriodId(id);
-      setAsAt(newFrom.end_date);
+      setAsAt(newFrom.end_date.slice(0, 10));
     }
   };
 
@@ -45,13 +60,13 @@ export function TrialBalancePage() {
     const newTo = periods.find((p) => p.id === id);
     // The trial balance shown is always cumulative as at a date — selecting a "To" period
     // just picks that date for you; the field stays editable for a specific interim date.
-    if (newTo) setAsAt(newTo.end_date);
+    if (newTo) setAsAt(newTo.end_date.slice(0, 10));
   };
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: queryKeys.trialBalance(clientId ?? '', asAt, includeDrafts),
     queryFn: () => getTrialBalance(clientId!, asAt, includeDrafts),
-    enabled: !!clientId,
+    enabled: !!clientId && !!asAt,
   });
 
   const canPrepareStatements = !!fromPeriodId && !!toPeriodId && !!data && data.balanced;
@@ -138,6 +153,8 @@ export function TrialBalancePage() {
           />
         </div>
       )}
+
+      {isLoading && <LoadingState label="Loading trial balance…" />}
 
       {data && (
         <LedgerTable

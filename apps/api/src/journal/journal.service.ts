@@ -41,6 +41,9 @@ export class JournalService {
 
     const period = await this.periods.findById(clientId, periodId);
     if (!period) throw new NotFoundError('Period', periodId);
+    // A closed period rejects all writes (CLAUDE.md rule 6), not just posting — a draft is
+    // still a write, and the whole point of closing a period is that it stops changing.
+    if (period.status !== 'OPEN') throw new PeriodClosedError(period.name);
     if (entryDate < period.start_date || entryDate > period.end_date) {
       throw new ValidationError(
         `Entry date ${entryDate} falls outside period "${period.name}" (${period.start_date} to ${period.end_date})`,
@@ -229,6 +232,8 @@ export class JournalService {
     if (existing.status !== 'DRAFT') {
       throw new ImmutableEntryError(id, 'is not a draft');
     }
+    const period = await this.periods.findById(clientId, existing.periodId);
+    if (period && period.status !== 'OPEN') throw new PeriodClosedError(period.name);
     await this.db.transaction(async (client) => {
       await this.journal.deleteEntry(client, clientId, id);
     });

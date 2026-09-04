@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AccountType } from '@ledgerline/shared';
+import { AccountType, Money } from '@ledgerline/shared';
 import { useClientPeriod } from '../context/ClientPeriodContext';
 import { getLedgerForPeriod } from '../api/ledger';
 import { queryKeys } from '../api/queryKeys';
@@ -8,6 +8,7 @@ import { TAccount } from '../components/TAccount';
 import { Figure } from '../components/Figure';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
+import { LoadingState } from '../components/LoadingState';
 import { PrintButton, PrintFooter } from '../components/PrintFooter';
 
 const TYPE_ORDER: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
@@ -29,7 +30,7 @@ export function LedgerPage() {
   const [typeFilter, setTypeFilter] = useState<AccountType | ''>('');
   const [showEmpty, setShowEmpty] = useState(false);
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: queryKeys.ledgerForPeriod(clientId ?? '', periodId ?? ''),
     queryFn: () => getLedgerForPeriod(clientId!, periodId!),
     enabled: !!clientId && !!periodId,
@@ -39,7 +40,14 @@ export function LedgerPage() {
     if (!data) return [];
     const q = search.trim().toLowerCase();
     return data.accounts.filter((a) => {
-      if (!showEmpty && a.debitLines.length === 0 && a.creditLines.length === 0) return false;
+      // "No entries" means nothing to show at all — zero movement *and* zero balance. An
+      // account can carry a real balance from an earlier period with nothing posted to it
+      // this period specifically (Capital, say); that is not an empty account, and hiding
+      // it by default previously depended on balance being derived from this period's own
+      // lines. It no longer is (see LedgerService.ledgerForPeriod), so this check no longer
+      // can be either.
+      const hasNothing = a.debitLines.length === 0 && a.creditLines.length === 0 && Money.of(a.balance).isZero();
+      if (!showEmpty && hasNothing) return false;
       if (typeFilter && a.type !== typeFilter) return false;
       if (q && !a.name.toLowerCase().includes(q)) return false;
       return true;
@@ -92,6 +100,8 @@ export function LedgerPage() {
           with no entries
         </label>
       </div>
+
+      {isLoading && <LoadingState label="Loading ledger…" />}
 
       {data && filtered.length === 0 && <EmptyState title="No accounts match." />}
 

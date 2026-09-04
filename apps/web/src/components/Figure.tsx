@@ -7,6 +7,13 @@ interface FigureProps {
   // dashes at all, and the default "—" is a literal character in the rendered text, not
   // something a print stylesheet can substitute.
   zeroDisplay?: string;
+  // The balance sheet and income statement show every component of the chart of accounts,
+  // including ones with nothing posted to them — the dash placeholder exists so a page of
+  // real ledger detail isn't drowned in zeroes, but a statement listing every line item is
+  // making a different claim ("here is the whole structure, and this is what's in it"),
+  // where a bare zero is the honest figure and a dash would read as "not applicable" or
+  // "not yet known" instead of "confirmed nil". Overrides zeroDisplay when true.
+  showZero?: boolean;
 }
 
 // The Ghanaian cedi symbol, used throughout — LedgerLine has one currency (see CLAUDE.md's
@@ -16,10 +23,10 @@ const CURRENCY = 'GH₵';
 // Renders a decimal-string amount the way a ledger does: a currency symbol, thousand
 // separators, two decimal places, a negative shown in parentheses rather than with a minus
 // sign, and zero as a dash rather than "0.00" so a page of figures doesn't drown in zeroes.
-export function Figure({ value, className, zeroDisplay = '—' }: FigureProps) {
+export function Figure({ value, className, zeroDisplay = '—', showZero = false }: FigureProps) {
   const money = Money.of(value);
 
-  if (money.isZero()) {
+  if (money.isZero() && !showZero) {
     return <span className={`figure ${className ?? ''}`}>{zeroDisplay}</span>;
   }
 

@@ -4,6 +4,7 @@ import { useClientPeriod } from '../context/ClientPeriodContext';
 import { getStatements } from '../api/reports';
 import { Figure } from '../components/Figure';
 import { ErrorState } from '../components/ErrorState';
+import { LoadingState } from '../components/LoadingState';
 import { PrintButton, PrintFooter } from '../components/PrintFooter';
 import { formatDate, formatMoney } from '../utils/format';
 
@@ -18,7 +19,7 @@ function StatementRows({ lines }: { lines: { accountId: string; name: string; am
         <tr key={line.accountId}>
           <td style={{ padding: '4px 8px' }}>{line.name}</td>
           <td style={{ padding: '4px 8px', textAlign: 'right' }} className="figure">
-            <Figure value={line.amount} zeroDisplay={ZERO} />
+            <Figure value={line.amount} zeroDisplay={ZERO} showZero />
           </td>
         </tr>
       ))}
@@ -36,7 +37,7 @@ export function FinancialStatementsPage() {
   const from = searchParams.get('from') ?? '';
   const to = searchParams.get('to') ?? '';
 
-  const { data, isError, error } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['statements', clientId, from, to],
     queryFn: () => getStatements(clientId!, from, to),
     enabled: !!clientId && !!from && !!to,
@@ -52,6 +53,7 @@ export function FinancialStatementsPage() {
       <h2>Financial statements</h2>
 
       {isError && <ErrorState message={error instanceof Error ? error.message : 'Failed to generate statements'} />}
+      {isLoading && <LoadingState label="Preparing statements…" />}
 
       {data && (
         <>
@@ -68,7 +70,7 @@ export function FinancialStatementsPage() {
                 <tr style={{ borderTop: '1px solid var(--ink)' }}>
                   <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total revenue</td>
                   <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                    <Figure value={data.incomeStatement.totalIncome} zeroDisplay={ZERO} />
+                    <Figure value={data.incomeStatement.totalIncome} zeroDisplay={ZERO} showZero />
                   </td>
                 </tr>
               </tbody>
@@ -82,13 +84,13 @@ export function FinancialStatementsPage() {
                     <tr style={{ borderTop: '1px solid var(--ink)' }}>
                       <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total cost of sales</td>
                       <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                        <Figure value={data.incomeStatement.totalCostOfSales} zeroDisplay={ZERO} />
+                        <Figure value={data.incomeStatement.totalCostOfSales} zeroDisplay={ZERO} showZero />
                       </td>
                     </tr>
                     <tr style={{ borderTop: '1px solid var(--ink)', borderBottom: '3px double var(--ink)' }}>
                       <td style={{ padding: '6px 8px', fontWeight: 700 }}>Gross profit</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                        <Figure value={data.incomeStatement.grossProfit} zeroDisplay={ZERO} />
+                        <Figure value={data.incomeStatement.grossProfit} zeroDisplay={ZERO} showZero />
                       </td>
                     </tr>
                   </tbody>
@@ -103,7 +105,7 @@ export function FinancialStatementsPage() {
                 <tr style={{ borderTop: '1px solid var(--ink)' }}>
                   <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total operating expenses</td>
                   <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                    <Figure value={data.incomeStatement.totalOperatingExpenses} zeroDisplay={ZERO} />
+                    <Figure value={data.incomeStatement.totalOperatingExpenses} zeroDisplay={ZERO} showZero />
                   </td>
                 </tr>
               </tbody>
@@ -116,7 +118,7 @@ export function FinancialStatementsPage() {
                     {data.incomeStatement.profitForPeriod.startsWith('-') ? 'Net loss for the period' : 'Net profit for the period'}
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                    <Figure value={data.incomeStatement.profitForPeriod} zeroDisplay={ZERO} />
+                    <Figure value={data.incomeStatement.profitForPeriod} zeroDisplay={ZERO} showZero />
                   </td>
                 </tr>
               </tbody>
@@ -143,7 +145,7 @@ export function FinancialStatementsPage() {
                 <tr style={{ borderTop: '1px solid var(--ink)' }}>
                   <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total assets</td>
                   <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                    <Figure value={data.balanceSheet.totalAssets} zeroDisplay={ZERO} />
+                    <Figure value={data.balanceSheet.totalAssets} zeroDisplay={ZERO} showZero />
                   </td>
                 </tr>
               </tbody>
@@ -156,7 +158,7 @@ export function FinancialStatementsPage() {
                 <tr style={{ borderTop: '1px solid var(--ink)' }}>
                   <td style={{ padding: '4px 8px', fontWeight: 600 }}>Total liabilities</td>
                   <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>
-                    <Figure value={data.balanceSheet.totalLiabilities} zeroDisplay={ZERO} />
+                    <Figure value={data.balanceSheet.totalLiabilities} zeroDisplay={ZERO} showZero />
                   </td>
                 </tr>
               </tbody>
@@ -169,7 +171,7 @@ export function FinancialStatementsPage() {
                 <tr style={{ borderTop: '1px solid var(--ink)', borderBottom: '3px double var(--ink)' }}>
                   <td style={{ padding: '6px 8px', fontWeight: 700 }}>Total liabilities and equity</td>
                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
-                    <Figure value={data.balanceSheet.totalLiabilitiesAndEquity} zeroDisplay={ZERO} />
+                    <Figure value={data.balanceSheet.totalLiabilitiesAndEquity} zeroDisplay={ZERO} showZero />
                   </td>
                 </tr>
               </tbody>

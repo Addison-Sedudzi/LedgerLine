@@ -107,7 +107,7 @@ export class AccountsService {
     return String(next);
   }
 
-  async create(clientId: string, dto: CreateAccountDto): Promise<Account> {
+  async create(clientId: string, actorId: string, dto: CreateAccountDto): Promise<Account> {
     const code = dto.code ?? (await this.nextCode(clientId, dto.type));
 
     const existing = await this.repo.findByCode(clientId, code);
@@ -123,24 +123,36 @@ export class AccountsService {
       }
     }
 
-    const account = await this.repo.create(clientId, {
-      code,
-      name: dto.name,
-      type: dto.type,
-      normalBalance: deriveNormalBalance(dto.type),
-      parentId: dto.parentId ?? null,
-      isPostable: dto.isPostable ?? true,
-      description: dto.description ?? null,
-      subtype: defaultSubtype(dto.type),
+    return this.db.transaction(async (client) => {
+      const account = await this.repo.create(
+        clientId,
+        {
+          code,
+          name: dto.name,
+          type: dto.type,
+          normalBalance: deriveNormalBalance(dto.type),
+          parentId: dto.parentId ?? null,
+          isPostable: dto.isPostable ?? true,
+          description: dto.description ?? null,
+          subtype: defaultSubtype(dto.type),
+        },
+        client,
+      );
+
+      // An account with children is not postable — only leaves take postings. Adding the
+      // first child to a previously-leaf parent must retract its own postability.
+      if (dto.parentId) {
+        await this.repo.setPostable(clientId, dto.parentId, false, client);
+      }
+
+      const after = toAccountDto(account);
+      await this.audit.record(
+        { actorId, clientId, action: 'CREATE', entityType: 'account', entityId: account.id, after },
+        client,
+      );
+
+      return after;
     });
-
-    // An account with children is not postable — only leaves take postings. Adding the
-    // first child to a previously-leaf parent must retract its own postability.
-    if (dto.parentId) {
-      await this.repo.setPostable(clientId, dto.parentId, false);
-    }
-
-    return toAccountDto(account);
   }
 
   async update(clientId: string, actorId: string, id: string, dto: UpdateAccountDto): Promise<Account> {

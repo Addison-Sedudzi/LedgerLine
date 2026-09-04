@@ -5,7 +5,7 @@ import { UserRole } from '@ledgerline/shared';
 import { useAuth } from '../context/AuthContext';
 import { useClientPeriod } from '../context/ClientPeriodContext';
 import { createClient } from '../api/me';
-import { createPeriod } from '../api/periods';
+import { closePeriod, createPeriod, Period } from '../api/periods';
 import { queryKeys } from '../api/queryKeys';
 import { ApiError } from '../api/apiClient';
 import { PeriodBadge } from './PeriodBadge';
@@ -236,19 +236,87 @@ function NewPeriodForm({ clientId, onCreated }: { clientId: string; onCreated: (
   );
 }
 
+// Admin-only, next to the period badge — the OPEN/CLOSED status is a label, never a
+// control, so closing a period needs its own explicit action rather than being implied by
+// clicking the badge itself.
+function ClosePeriodButton({ clientId, period }: { clientId: string; period: Period }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => closePeriod(clientId, period.id),
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.periods(clientId) });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Failed to close period'),
+  });
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => {
+          if (
+            confirm(
+              `Close period "${period.name}"? Once closed, no postings, draft entries, or account changes to entries in ` +
+                'this period can be made. This cannot be undone from here.',
+            )
+          ) {
+            setError(null);
+            mutation.mutate();
+          }
+        }}
+        disabled={mutation.isPending}
+        title="Lock this period against further postings"
+        style={{ background: 'none', border: '1px solid var(--rule)', borderRadius: 'var(--radius)', padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}
+      >
+        Close period
+      </button>
+      {error && (
+        <div
+          style={{
+            position: 'absolute',
+            zIndex: 20,
+            top: '100%',
+            left: 0,
+            marginTop: 4,
+            background: 'var(--paper)',
+            border: '1px solid var(--alarm)',
+            borderRadius: 'var(--radius)',
+            padding: 8,
+            fontSize: 12,
+            color: 'var(--alarm)',
+            width: 260,
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Layout(): ReactNode {
   const { me, signOut } = useAuth();
   const { clientId, clients, periodId, periods, period, setClientId, setPeriodId, isPeriodClosed } =
     useClientPeriod();
   const isAdmin = me?.role === 'admin';
+  // Only meaningful below the responsive.css breakpoint — at desktop widths the sidebar is
+  // always visible via CSS regardless of this, so there's nothing to reset when the window
+  // is resized back up.
+  const [navOpen, setNavOpen] = useState(false);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="app-shell" style={{ display: 'flex', minHeight: '100vh' }}>
+      {navOpen && <div className="app-sidebar-overlay" onClick={() => setNavOpen(false)} />}
       <nav
-        className="no-print"
+        className={`no-print app-sidebar${navOpen ? ' open' : ''}`}
         style={{
           width: 220,
           borderRight: '1px solid var(--rule)',
+          borderRadius: 0,
+          background: 'var(--paper)',
           padding: 'var(--space-4)',
           display: 'flex',
           flexDirection: 'column',
@@ -269,6 +337,7 @@ export function Layout(): ReactNode {
                 <li key={item.to}>
                   <NavLink
                     to={item.to}
+                    onClick={() => setNavOpen(false)}
                     style={({ isActive }) => ({
                       display: 'block',
                       padding: '6px 8px',
@@ -298,7 +367,7 @@ export function Layout(): ReactNode {
         </div>
       </nav>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header
           className="no-print"
           style={{
@@ -309,6 +378,28 @@ export function Layout(): ReactNode {
             borderBottom: '1px solid var(--rule)',
           }}
         >
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setNavOpen((o) => !o)}
+            aria-label="Toggle navigation menu"
+            style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              border: '1px solid var(--rule)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+              cursor: 'pointer',
+              fontSize: 16,
+              flexShrink: 0,
+            }}
+          >
+            ☰
+          </button>
+          <div className="app-header-controls" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
           <select
             value={clientId ?? ''}
             onChange={(e) => setClientId(e.target.value)}
@@ -348,6 +439,10 @@ export function Layout(): ReactNode {
           {isAdmin && clientId && <NewPeriodForm clientId={clientId} onCreated={setPeriodId} />}
 
           {period && <PeriodBadge name={period.name} status={period.status} />}
+          {isAdmin && clientId && period && period.status === 'OPEN' && (
+            <ClosePeriodButton clientId={clientId} period={period} />
+          )}
+          </div>
         </header>
 
         {isPeriodClosed && (

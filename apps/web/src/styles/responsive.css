@@ -1,0 +1,48 @@
+/* Below this width the sidebar can no longer sit beside the content without squeezing it —
+   it becomes a slide-in drawer instead, opened by the hamburger button Layout.tsx renders
+   for exactly this width range (see .sidebar-toggle below). */
+@media (max-width: 768px) {
+  .app-shell {
+    overflow-x: hidden;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .app-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 40;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex !important;
+  }
+
+  .app-header-controls {
+    flex-wrap: wrap;
+  }
+}
+
+.app-sidebar-overlay {
+  display: none;
+}
+
+.sidebar-toggle {
+  display: none;
+}

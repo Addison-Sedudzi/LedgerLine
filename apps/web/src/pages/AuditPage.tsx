@@ -20,20 +20,28 @@ interface AuditRow {
 export function AuditPage() {
   const { clientId, period } = useClientPeriod();
 
-  // occurred_at is a timestamptz; the period's own dates are plain dates, so "to" is pushed
-  // to the end of that calendar day — otherwise a bare date string compares against midnight
-  // UTC and silently drops everything recorded later that same day.
-  const from = period?.start_date;
-  const to = period ? `${period.end_date}T23:59:59.999` : undefined;
+  // period.start_date/end_date come back from GET /periods as whatever the pg driver and
+  // JSON.stringify made of a Postgres `date` column — a full timestamp string
+  // ("2026-09-30T00:00:00.000Z"), not a plain date. Slicing to the first 10 characters
+  // before building "to" is required: appending a time straight onto the raw value once
+  // produced a doubly-timestamped, unparseable string that Postgres rejected outright,
+  // which is exactly what made this page 500. occurred_at is itself a timestamptz, so "to"
+  // still needs pushing to the end of that calendar day, or a bare date compares against
+  // midnight UTC and silently drops everything recorded later that same day.
+  const from = period?.start_date.slice(0, 10);
+  const to = period ? `${period.end_date.slice(0, 10)}T23:59:59.999` : undefined;
 
+  // No period selected yet (e.g. a brand new client with none created) is a real, valid
+  // state — the page should still show the client's whole history, not sit disabled
+  // forever waiting for a period that may never come.
   const { data, isError, error } = useQuery({
-    queryKey: queryKeys.audit(clientId ?? '', { periodId: period?.id }),
+    queryKey: queryKeys.audit(clientId ?? '', { from, to }),
     queryFn: () =>
       apiFetch<{ rows: AuditRow[]; total: number }>(
         `/audit${from && to ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : ''}`,
         { clientId: clientId! },
       ),
-    enabled: !!clientId && !!period,
+    enabled: !!clientId,
   });
 
   return (

@@ -64,4 +64,29 @@ export class PeriodsRepository {
     );
     return rows[0];
   }
+
+  // A period can't be closed while it still has drafts sitting in it — once closed, a draft
+  // can no longer be posted, edited, or deleted (a closed period rejects all writes, see
+  // JournalService.validateAndBuildLines/remove), so a draft trapped inside a closed period
+  // would be permanently stuck. The bookkeeper must post or delete each one first. Queries
+  // journal_entries directly, the same way AccountsRepository.hasPostings queries
+  // journal_lines directly, rather than depending on JournalModule (which itself depends on
+  // PeriodsModule) and risking a circular module dependency for one boolean check.
+  async hasDraftEntries(clientId: string, periodId: string): Promise<boolean> {
+    const rows = await this.db.query(
+      `SELECT 1 FROM journal_entries WHERE client_id = $1 AND period_id = $2 AND status = 'DRAFT' LIMIT 1`,
+      [clientId, periodId],
+    );
+    return rows.length > 0;
+  }
+
+  async close(clientId: string, id: string, closedBy: string, client?: PoolClient): Promise<PeriodRow> {
+    const runner = client ?? this.db.pool;
+    const result = await runner.query(
+      `UPDATE fiscal_periods SET status = 'CLOSED', closed_at = now(), closed_by = $3
+       WHERE client_id = $1 AND id = $2 RETURNING *`,
+      [clientId, id, closedBy],
+    );
+    return result.rows[0];
+  }
 }

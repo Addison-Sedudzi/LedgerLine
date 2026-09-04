@@ -72,8 +72,9 @@ export class AccountsRepository {
     return rows[0] ?? null;
   }
 
-  async setPostable(clientId: string, id: string, isPostable: boolean): Promise<void> {
-    await this.db.query('UPDATE accounts SET is_postable = $3 WHERE client_id = $1 AND id = $2', [
+  async setPostable(clientId: string, id: string, isPostable: boolean, client?: PoolClient): Promise<void> {
+    const runner = client ?? this.db.pool;
+    await runner.query('UPDATE accounts SET is_postable = $3 WHERE client_id = $1 AND id = $2', [
       clientId,
       id,
       isPostable,
@@ -115,8 +116,10 @@ export class AccountsRepository {
       description: string | null;
       subtype: AccountSubtype | null;
     },
+    client?: PoolClient,
   ): Promise<AccountRow> {
-    const rows = await this.db.query<AccountRow>(
+    const runner = client ?? this.db.pool;
+    const result = await runner.query<AccountRow>(
       `INSERT INTO accounts (client_id, code, name, type, normal_balance, parent_id, is_postable, description, subtype)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
@@ -131,7 +134,7 @@ export class AccountsRepository {
         input.subtype,
       ],
     );
-    return rows[0];
+    return result.rows[0];
   }
 
   async update(

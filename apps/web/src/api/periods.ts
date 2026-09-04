@@ -20,3 +20,7 @@ export function createPeriod(
 ) {
   return apiFetch<Period>('/periods', { method: 'POST', body: input, clientId });
 }
+
+export function closePeriod(clientId: string, id: string) {
+  return apiFetch<Period>(`/periods/${id}/close`, { method: 'POST', clientId });
+}
