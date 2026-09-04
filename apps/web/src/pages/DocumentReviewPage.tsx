@@ -3,13 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useClientPeriod } from '../context/ClientPeriodContext';
 import { getDocument, approveDocument, rejectDocument } from '../api/documents';
-import { apiFetchBlobUrl } from '../api/apiClient';
+import { ApiError, apiFetchBlobUrl } from '../api/apiClient';
 import { listAccounts } from '../api/accounts';
 import { queryKeys } from '../api/queryKeys';
 import { AccountPicker } from '../components/AccountPicker';
 import { DateField } from '../components/DateField';
 import { Figure } from '../components/Figure';
 import { LedgerTable } from '../components/LedgerTable';
+import { ErrorState } from '../components/ErrorState';
 import { formatMoney } from '../utils/format';
 
 export function DocumentReviewPage() {
@@ -79,7 +80,7 @@ export function DocumentReviewPage() {
 
   if (!doc) return <p>Loading…</p>;
 
-  const canApprove = doc.status === 'EXTRACTED' && expenseAccountId && paymentAccountId && amount && entryDate;
+  const canApprove = Boolean(doc.status === 'EXTRACTED' && expenseAccountId && paymentAccountId && amount && entryDate);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)' }}>
@@ -147,7 +148,13 @@ export function DocumentReviewPage() {
             )}
 
             <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+              {approveMutation.isError && (
+                <ErrorState
+                  message={approveMutation.error instanceof ApiError ? approveMutation.error.message : 'Failed to approve document'}
+                />
+              )}
               <button
+                type="button"
                 disabled={!canApprove || approveMutation.isPending}
                 onClick={() => approveMutation.mutate()}
                 style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius)' }}
