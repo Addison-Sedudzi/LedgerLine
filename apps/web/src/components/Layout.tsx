@@ -356,8 +356,6 @@ export function Layout(): ReactNode {
           );
         })}
         <div style={{ marginTop: 'auto', fontSize: 12, color: 'var(--ink-muted)' }}>
-          <div>{me?.fullName}</div>
-          <div>{me?.role}</div>
           <button
             onClick={() => signOut()}
             style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0 }}

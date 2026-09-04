@@ -5,16 +5,34 @@ import { queryKeys } from '../api/queryKeys';
 import { LedgerTable } from '../components/LedgerTable';
 import { ErrorState } from '../components/ErrorState';
 import { formatDateTime } from '../utils/format';
+import { actionLabel, actorLabel, auditChanges, entityLabel, AuditRow } from '../utils/audit';
 
-interface AuditRow {
-  id: number;
-  actor_id: string;
-  action: string;
-  entity_type: string;
-  entity_id: string;
-  before: unknown;
-  after: unknown;
-  occurred_at: string;
+function AuditChangeCell({ row }: { row: AuditRow }) {
+  const changes = auditChanges(row);
+
+  return (
+    <div style={{ fontSize: 12 }}>
+      {changes.length === 0 && (
+        <span style={{ color: 'var(--ink-muted)' }}>
+          {row.action === 'DELETE' ? 'Record removed' : 'No field values changed'}
+        </span>
+      )}
+      {changes.map((change) => (
+        <div key={change.label} style={{ marginBottom: 2 }}>
+          <span style={{ color: 'var(--ink-muted)' }}>{change.label}:</span>{' '}
+          {change.from ? (
+            <>
+              <span style={{ textDecoration: 'line-through', color: 'var(--ink-muted)' }}>{change.from}</span>
+              {' → '}
+              <span style={{ fontWeight: 600 }}>{change.to}</span>
+            </>
+          ) : (
+            <span style={{ fontWeight: 600 }}>{change.to}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function AuditPage() {
@@ -55,17 +73,13 @@ export function AuditPage() {
       <LedgerTable
         columns={[
           { key: 'time', header: 'Time', render: (r) => formatDateTime(r.occurred_at) },
-          { key: 'actor', header: 'Actor', render: (r) => r.actor_id },
-          { key: 'action', header: 'Action', render: (r) => r.action },
-          { key: 'entity', header: 'Entity', render: (r) => `${r.entity_type} ${r.entity_id}` },
+          { key: 'actor', header: 'Actor', render: (r) => actorLabel(r) },
+          { key: 'action', header: 'Action', render: (r) => actionLabel(r.action) },
+          { key: 'entity', header: 'Entity', render: (r) => entityLabel(r) },
           {
             key: 'change',
-            header: 'Before → after',
-            render: (r) => (
-              <span style={{ fontSize: 11 }}>
-                {r.before ? JSON.stringify(r.before).slice(0, 60) : '—'} → {r.after ? JSON.stringify(r.after).slice(0, 60) : '—'}
-              </span>
-            ),
+            header: 'What changed',
+            render: (r) => <AuditChangeCell row={r} />,
           },
         ]}
         rows={data?.rows ?? []}
